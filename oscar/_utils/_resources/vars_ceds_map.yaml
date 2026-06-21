@@ -1,0 +1,61 @@
+# ==============================================================================
+# OSCAR CEDS TRANSLATION REGISTRY (Wide Format)
+# ==============================================================================
+# Final Element in list is the Expected CEDS/RESCUE Unit for validation.
+# C: 12.011 | O: 15.999 | N: 14.007 | S: 32.06 | H: 1.008
+# Units in source: Mt for main species | kt for halogens
+# Target units: PgC, TgN, TgS, Tg species, Gg species
+# ==============================================================================
+
+# 1. Standard Emissions (Regional)
+# Format: "CEDS_Variable": ["OSCAR_VAR", "OSCAR_ID", "Calculation", "Expected_Unit"]
+emissions:
+  "CEDS+|9+ Sectors|Emissions|CO2|Total": ["Eff", "Eff", "(12.011 / 44.009) / 1000", "Mt CO2/yr"]
+  "CEDS+|9+ Sectors|Emissions|CH4|Total": ["E_CH4", "E_CH4", "12.011 / 16.043", "Mt CH4/yr"]
+  "CEDS+|9+ Sectors|Emissions|N2O|Total": ["E_N2O", "E_N2O", "(28.014 / 44.013) / 1000", "kt N2O/yr"]
+  "CEDS+|9+ Sectors|Emissions|NOx|Total": ["E_NOX", "E_NOX", "14.007 / 46.005", "Mt NO2/yr"]
+  "CEDS+|9+ Sectors|Emissions|SO2|Total": ["E_SO2", "E_SO2", "32.06 / 64.06", "Mt SO2/yr"]
+  "CEDS+|9+ Sectors|Emissions|NH3|Total": ["E_NH3", "E_NH3", "14.007 / 17.031", "Mt NH3/yr"]
+  "CEDS+|9+ Sectors|Emissions|VOC|Total": ["E_VOC", "E_VOC", "1.0", "Mt VOC/yr"]
+  "CEDS+|9+ Sectors|Emissions|BC|Total":  ["E_BC", "E_BC", "1.0", "Mt BC/yr"]
+  "CEDS+|9+ Sectors|Emissions|OC|Total":  ["E_OC", "E_OC", "1.0", "Mt OC/yr"]
+  "CEDS+|9+ Sectors|Emissions|CO|Total":  ["E_CO", "E_CO", "12.011/(12.011+15.999)", "Mt CO/yr"]
+
+  # Halogens (OSCAR_VAR is E_Xhalo, OSCAR_ID is the specific compound)
+  # Multiplier: 1.0 because kt (CEDS) = Gg (OSCAR)
+  "CEDS+|9+ Sectors|Emissions|HFC134a|Total": ["E_Xhalo", "HFC-134a", "1.0", "kt HFC134a/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC23|Total":   ["E_Xhalo", "HFC-23", "1.0", "kt HFC23/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC32|Total":   ["E_Xhalo", "HFC-32", "1.0", "kt HFC32/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC125|Total":  ["E_Xhalo", "HFC-125", "1.0", "kt HFC125/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC143a|Total": ["E_Xhalo", "HFC-143a", "1.0", "kt HFC143a/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC152a|Total": ["E_Xhalo", "HFC-152a", "1.0", "kt HFC152a/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC227ea|Total": ["E_Xhalo", "HFC-227ea", "1.0", "kt HFC227ea/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC236fa|Total": ["E_Xhalo", "HFC-236fa", "1.0", "kt HFC236fa/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC245fa|Total": ["E_Xhalo", "HFC-245fa", "1.0", "kt HFC245fa/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC365mfc|Total": ["E_Xhalo", "HFC-365mfc", "1.0", "kt HFC365mfc/yr"]
+  "CEDS+|9+ Sectors|Emissions|HFC4310mee|Total": ["E_Xhalo", "HFC-43-10mee", "1.0", "kt HFC4310mee/yr"]
+  "CEDS+|9+ Sectors|Emissions|CFC11|Total":   ["E_Xhalo", "CFC-11", "1.0", "kt CFC11/yr"]
+  "CEDS+|9+ Sectors|Emissions|CFC12|Total":   ["E_Xhalo", "CFC-12", "1.0", "kt CFC12/yr"]
+  "CEDS+|9+ Sectors|Emissions|CFC113|Total":  ["E_Xhalo", "CFC-113", "1.0", "kt CFC113/yr"]
+  "CEDS+|9+ Sectors|Emissions|CFC114|Total":  ["E_Xhalo", "CFC-114", "1.0", "kt CFC114/yr"]
+  "CEDS+|9+ Sectors|Emissions|CFC115|Total":  ["E_Xhalo", "CFC-115", "1.0", "kt CFC115/yr"]
+  "CEDS+|9+ Sectors|Emissions|CCl4|Total":    ["E_Xhalo", "CCl4", "1.0", "kt CCl4/yr"]
+  "CEDS+|9+ Sectors|Emissions|CH3CCl3|Total": ["E_Xhalo", "CH3CCl3", "1.0", "kt CH3CCl3/yr"]
+  "CEDS+|9+ Sectors|Emissions|HCFC22|Total":  ["E_Xhalo", "HCFC-22", "1.0", "kt HCFC22/yr"]
+  "CEDS+|9+ Sectors|Emissions|HCFC141b|Total": ["E_Xhalo", "HCFC-141b", "1.0", "kt HCFC141b/yr"]
+  "CEDS+|9+ Sectors|Emissions|HCFC142b|Total": ["E_Xhalo", "HCFC-142b", "1.0", "kt HCFC142b/yr"]
+  "CEDS+|9+ Sectors|Emissions|CH3Cl|Total":   ["E_Xhalo", "CH3Cl", "1.0", "kt CH3Cl/yr"]
+  "CEDS+|9+ Sectors|Emissions|CH3Br|Total":   ["E_Xhalo", "CH3Br", "1.0", "kt CH3Br/yr"]
+  "CEDS+|9+ Sectors|Emissions|Halon1202|Total": ["E_Xhalo", "Halon-1202", "1.0", "kt Halon1202/yr"]
+  "CEDS+|9+ Sectors|Emissions|Halon1211|Total": ["E_Xhalo", "Halon-1211", "1.0", "kt Halon1211/yr"]
+  "CEDS+|9+ Sectors|Emissions|Halon1301|Total": ["E_Xhalo", "Halon-1301", "1.0", "kt Halon1301/yr"]
+  "CEDS+|9+ Sectors|Emissions|Halon2402|Total": ["E_Xhalo", "Halon-2402", "1.0", "kt Halon2402/yr"]
+  "CEDS+|9+ Sectors|Emissions|SF6|Total":     ["E_Xhalo", "SF6", "1.0", "kt SF6/yr"]
+  "CEDS+|9+ Sectors|Emissions|NF3|Total":     ["E_Xhalo", "NF3", "1.0", "kt NF3/yr"]
+  "CEDS+|9+ Sectors|Emissions|C2F6|Total":    ["E_Xhalo", "C2F6", "1.0", "kt C2F6/yr"]
+  "CEDS+|9+ Sectors|Emissions|C3F8|Total":    ["E_Xhalo", "C3F8", "1.0", "kt C3F8/yr"]
+  "CEDS+|9+ Sectors|Emissions|C4F10|Total":   ["E_Xhalo", "C4F10", "1.0", "kt C4F10/yr"]
+  "CEDS+|9+ Sectors|Emissions|C5F12|Total":   ["E_Xhalo", "C5F12", "1.0", "kt C5F12/yr"]
+  "CEDS+|9+ Sectors|Emissions|C6F14|Total":   ["E_Xhalo", "C6F14", "1.0", "kt C6F14/yr"]
+  "CEDS+|9+ Sectors|Emissions|C7F16|Total":   ["E_Xhalo", "C7F16", "1.0", "kt C7F16/yr"]
+  "CEDS+|9+ Sectors|Emissions|c-C4F8|Total":  ["E_Xhalo", "c-C4F8", "1.0", "kt c-C4F8/yr"]

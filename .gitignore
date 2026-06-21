@@ -1,0 +1,107 @@
+# ==================================================
+# OSCAR Project .gitignore
+# ==================================================
+
+# ------------------
+# Local user settings
+.oscar_settings.json
+# ------------------
+
+# ------------------
+# Data & Inputs
+# ------------------
+# Ignore all data by default (to keep large datasets out of Git)
+oscar_data/**
+!oscar_data/library/
+!oscar_data/library/core_data/
+!oscar_data/library/core_data/params_precalib/
+!oscar_data/library/core_data/params_precalib/**
+
+# ==================================================
+
+# ------------------
+# Python cache / bytecode
+# ------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.so
+
+# ------------------
+# Development & Environment
+# ------------------
+.venv/
+venv/
+env/
+ENV/
+.uv/
+.env
+.env.*
+.oscar_settings.json
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+
+# ------------------
+# IDE / Editor / OS Files
+# ------------------
+.vscode/
+.idea/
+.spyderproject
+.ropeproject
+.DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+
+# ------------------
+# Build / Packaging Artifacts
+# ------------------
+build/
+dist/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+sdist/
+var/
+target/
+.Python
+develop-eggs/
+downloads/
+lib/
+lib64/
+parts/
+
+# ------------------
+# Test / Coverage / Docs
+# ------------------
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache/
+coverage.xml
+nosetests.xml
+*,cover
+.hypothesis/
+docs/_build/
+
+# ------------------
+# Logs & Scripts
+# ------------------
+*.log
+
+# ------------------
+# Other / Frameworks
+# ------------------
+local_settings.py
+instance/
+.webassets-cache
+.scrapy
+celerybeat-schedule
+*.mo
+*.pot
+

@@ -1,0 +1,37 @@
+[project]
+name = "oscar"
+dynamic = ["version"]
+description = "OSCAR Earth system model"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "xarray",
+  "pandas",
+  "scipy",
+  "matplotlib",
+  "pyyaml",
+  "netcdf4>=1.7.2",
+  "h5netcdf>=1.8.0",
+  "h5py",
+  "click>=8.1.8",
+  "requests>=2.32.5",
+]
+
+[project.scripts]
+oscar = "oscar.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>.*)"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["oscar", "dev"] #for developer version
