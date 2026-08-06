@@ -22,15 +22,15 @@ OSCAR_permafrost = Model('OSCAR_permafrost')
 
 ## heterotrophic respiration factor for permafrost
 OSCAR_permafrost.process(
-    Out = 'f_ethaw', 
+    Out = 'r_ethaw', 
     In = ('D_Tg',), 
-    Eq = lambda Var, Par: Eq__f_ethaw(Var, Par), 
+    Eq = lambda Var, Par: Eq__r_ethaw(Var, Par), 
     units = '1')
 
-def Eq__f_ethaw(Var, Par):
-    f_T = safe_exp(Par.x_ethaw * Par.g_ethaw_T * Par.a_Tpf_Tg * Var.D_Tg,  f_max(1/Par.t_ethaw))
-    f_T2 = np.exp(-Par.x_ethaw * Par.g_ethaw_T2 * (Par.a_Tpf_Tg * Var.D_Tg)**2)
-    return f_T * f_T2
+def Eq__r_ethaw(Var, Par):
+    fct_T = safe_exp(Par.x_ethaw * Par.g_ethaw_T * Par.a_Tpf_Tg * Var.D_Tg,  f_max(1/Par.t_ethaw))
+    fct_T2 = np.exp(-Par.x_ethaw * Par.g_ethaw_T2 * (Par.a_Tpf_Tg * Var.D_Tg)**2)
+    return fct_T * fct_T2
 
 
 ## theoretical thawed fraction
@@ -71,12 +71,12 @@ def Eq__D_Fthaw(Var, Par):
 ## emissions from thawed permafrost carbon
 OSCAR_permafrost.process(
     Out = 'D_Ethaw', 
-    In = ('D_Cthaw', 'f_ethaw'), 
+    In = ('D_Cthaw', 'r_ethaw'), 
     Eq = lambda Var, Par: Eq__D_Ethaw(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Ethaw(Var, Par):
-    return 1 / Par.t_ethaw * Var.f_ethaw * Var.D_Cthaw
+    return 1 / Par.t_ethaw * Var.r_ethaw * Var.D_Cthaw
 
 
 ## total permafrost carbon emissions

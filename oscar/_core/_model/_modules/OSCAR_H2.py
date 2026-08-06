@@ -27,8 +27,8 @@ OSCAR_H2.process(
     units = 'yr-1')
 
 def Eq__v_H2_OH(Par):
-    if 'f_kOH_pd' not in Par: return None
-    return Par.v_H2_OH_pd / Par.f_kOH_pd
+    if 'r_kOH_pd' not in Par: return None
+    return Par.v_H2_OH_pd / Par.r_kOH_pd
 
 
 ## preindustrial H2 lifetime
@@ -92,12 +92,12 @@ def Eq__D_Fprod_H2(Var, Par):
 ## H2 hydroxyl sink
 OSCAR_H2.process(
     Out = 'D_Foh_H2', 
-    In = ('f_kOH', 'D_H2'), 
+    In = ('r_kOH', 'D_H2'), 
     Eq = lambda Var, Par: Eq__D_Foh_H2(Var, Par), 
     units = 'TgH2 yr-1')
 
 def Eq__D_Foh_H2(Var, Par):
-    return Par.a_H2 * Par.v_H2_OH * ((Par.H2_pi + Var.D_H2) * Var.f_kOH - Par.H2_pi)
+    return Par.a_H2 * Par.v_H2_OH * ((Par.H2_pi + Var.D_H2) * Var.r_kOH - Par.H2_pi)
 
 
 ## H2 soil sink
@@ -144,6 +144,8 @@ OSCAR_H2.process(
 def Eq__d_H2(Var, Par):
     return 1 / Par.a_H2 * (sum_reg(Var.D_Eant_H2) + sum_reg(Var.D_Ebb_H2) + Var.D_Fprod_H2 - Var.D_Fsink_H2 + Var.D_Emiss_H2)
 
+
+## ADDITIONAL DIAGNOSTICS
 
 ## H2 residual emissions (= budget imbalance)
 ## note: non-zero only if d_H2 is prescribed!

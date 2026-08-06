@@ -37,9 +37,9 @@ def get_params(**useless):
 
     ## present-day (2010-2019) lifetime
     ## (Hanqin et al., 2024; https://doi.org/10.5194/essd-16-2543-2024) (Table 3)
-    ## note: average of bottom-up and top-down, 
+    ## note: best guess from MLS satellite + photolysis model
     ## note: uncertainty as min-max range across both, not reduced because fairly low already!
-    Par['v_N2O_hv_pd'] = xr.DataArray(np.array([0.5*(13.4+12.6), 0.5*(14.5-12.3)]) / M_N2O_pd, dims='unc_LogNorm', attrs={'units': 'yr-1', 'years': (2010, 2019)})
+    Par['v_N2O_hv_pd'] = xr.DataArray(np.array([13.4, 0.5*(14.5-12.3)]) / M_N2O_pd, dims='unc_LogNorm', attrs={'units': 'yr-1', 'years': (2010, 2019)})
 
 
     ## RETURN

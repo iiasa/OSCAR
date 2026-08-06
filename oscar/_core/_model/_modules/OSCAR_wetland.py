@@ -17,8 +17,9 @@ OSCAR_wetland = Model('OSCAR_wetland')
 ## Secondary parameters
 ##=====================
 
-## preindustrial wetland areal emissions
-## note: because of different PI conditions
+## SHIFTED PREINDUSTRIAL STATE
+
+## adjusted preindustrial wetland areal emissions
 ## note: assumes climate was same between PI and precalibration period
 OSCAR_wetland.process(
     Out = 'ewet_pi', 
@@ -26,14 +27,11 @@ OSCAR_wetland.process(
     units = 'TgC Mha-1 yr-1')
 
 def Eq__ewet_pi(Par):
-    f_CO2 = 1 + Par.b_ewet_CO2 * np.log(Par.CO2_pi / Par.CO2_piW)
-    f_Tl = np.exp(Par.g_ewet_T * (Par.Tl_pi - Par.Tl_piW))
-    f_Pl = np.exp(Par.x_ewet_P * np.log(safe_ratio(Par.Pl_pi / Par.Pl_piW)))
-    return Par.k_ewet * Par.ewet_piW * f_CO2 * f_Tl * f_Pl
+    fct_CO2 = 1 + Par.b_ewet_CO2 * np.log(Par.CO2_pi / Par.CO2_piW)
+    return Par.k_ewet * Par.ewet_piW * fct_CO2
 
 
-## preindustrial wetland extent
-## note: because of different PI conditions
+## adjusted preindustrial wetland extent
 ## note: assumes climate was same between PI and precalibration period
 OSCAR_wetland.process(
     Out = 'Awet_pi', 
@@ -41,10 +39,8 @@ OSCAR_wetland.process(
     units = 'Mha')
 
 def Eq__Awet_pi(Par):
-    f_CO2 = (Par.CO2_pi / Par.CO2_piW) ** Par.x_Awet_CO2
-    f_Tl = np.exp(Par.x_Awet_T * np.log(safe_ratio(Par.Tl_pi / Par.Tl_piW)))
-    f_Pl = np.exp(Par.x_Awet_P * np.log(safe_ratio(Par.Pl_pi / Par.Pl_piW)))
-    return Par.Awet_piW * f_CO2 * f_Tl * f_Pl
+    fct_CO2 = (Par.CO2_pi / Par.CO2_piW) ** Par.x_Awet_CO2
+    return Par.Awet_piW * fct_CO2
 
 
 ##=====================
@@ -55,29 +51,29 @@ def Eq__Awet_pi(Par):
 ## note: new formulation combining NPP log-fertilisation and respiration Q10
 OSCAR_wetland.process(
     Out = 'D_ewet', 
-    In = ('D_CO2', 'D_Tl', 'D_Pl'), 
+    In = ('D_CO2', 'D_Tl', 'r_Pl'), 
     Eq = lambda Var, Par: Eq__D_ewet(Var, Par), 
     units = 'TgC Mha-1 yr-1')
 
 def Eq__D_ewet(Var, Par):
-    f_CO2 = 1 + Par.b_ewet_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi)
-    f_Tl = safe_exp(Par.g_ewet_T * Var.D_Tl, 5.)
-    f_Pl = safe_exp(Par.x_ewet_P * np.log(safe_ratio(1 + Var.D_Pl / Par.Pl_piW)), 5.)
-    return Par.ewet_pi * (f_CO2 * f_Tl * f_Pl  - 1)
+    fct_CO2 = 1 + Par.b_ewet_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi)
+    fct_Tl = safe_exp(Par.g_ewet_T * Var.D_Tl, 5.)
+    fct_Pl = safe_exp(Par.x_ewet_P * np.log(Var.r_Pl), 5.)
+    return Par.ewet_pi * (safe_ratio(fct_CO2 * fct_Tl * fct_Pl)  - 1)
     
 
 ## wetland extent
 OSCAR_wetland.process(
     Out = 'D_Awet', 
-    In = ('D_CO2', 'D_Tl', 'D_Pl'), 
+    In = ('D_CO2', 'D_Tl', 'r_Pl'), 
     Eq = lambda Var, Par: Eq__D_Awet(Var, Par), 
     units = 'Mha')
 
 def Eq__D_Awet(Var, Par):
-    f_CO2 = (1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_Awet_CO2
-    f_Tl = safe_exp(Par.x_Awet_T * np.log1p(Var.D_Tl / Par.Tl_pi), 5.)
-    f_Pl = safe_exp(Par.x_Awet_P * np.log(safe_ratio(1 + Var.D_Pl / Par.Pl_piW)), 5.)
-    return Par.Awet_pi * (f_CO2 * f_Tl * f_Pl - 1)
+    fct_CO2 = (1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_Awet_CO2
+    fct_Tl = safe_exp(Par.x_Awet_T * np.log1p(Var.D_Tl / Par.Tl_pi), 5.)
+    fct_Pl = safe_exp(Par.x_Awet_P * np.log(Var.r_Pl), 5.)
+    return Par.Awet_pi * (safe_ratio(fct_CO2 * fct_Tl * fct_Pl) - 1)
 
 
 ## wetland emissions

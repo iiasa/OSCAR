@@ -5,6 +5,7 @@ Location: oscar/_io/paths.py
 
 import json
 import shutil
+import platform
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -35,15 +36,18 @@ def set_data_dir(path):
 
 # get user data directory
 def get_user_data_dir() -> Optional[Path]:
-    """Quietly retrieves the saved data directory from settings without validation."""
+    """Quietly retrieves the saved data directory, preferring OS-specific settings."""
     if not SETTINGS_FILE.exists():
         return None
     try:
         with open(SETTINGS_FILE, "r") as f:
             data = json.load(f)
-            return Path(data["data_dir"])
+        path = data.get(f"data_dir_{platform.system()}") or data.get("data_dir")
+        if path:
+            return Path(path).expanduser().resolve()
     except (KeyError, json.JSONDecodeError, OSError):
-        return None
+        pass    
+    return None
 
 
 def create_project(project_name: str) -> Optional[Path]:
@@ -70,7 +74,7 @@ def create_project(project_name: str) -> Optional[Path]:
     else:
         print("[OSCAR] Warning: Library templates not found. Manual setup required.")
     
-    return p_path
+    return None
 
 
 def validate_config() -> bool:
@@ -116,8 +120,8 @@ def get_paths() -> Optional[Dict[str, Path]]:
     return {
         "data_root": data_root,
         "library": lib,
-        "core_data": lib_core_data,
         # Scientific Library Core Data Paths
+        "core_data": lib_core_data,
         "drivers_fixed": lib_core_data / "drivers_fixed",
         "drivers_latest": lib_core_data / "drivers_latest",
         "observations": lib_core_data / "observations",
@@ -130,5 +134,8 @@ def get_paths() -> Optional[Dict[str, Path]]:
         # Research & Results
         "projects": data_root / "projects",
         "results": data_root / "results",
+        # Developer folders
+        "dev_data": data_root / "dev_data",
+        "setup_data": data_root / "dev_data" / "setup_data",
     }
 

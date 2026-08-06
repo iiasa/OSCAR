@@ -21,12 +21,11 @@ def ensure_configured_library(hist_type, region):
 
     # 2. If not found, prepare for download
     full_cfg = load_config()
-    record_id = full_cfg['metadata']['configured']['zenodo_id']
-    zip_filename = f"OSCAR_configured_{hist_type}_{region}.zip"
+    record_id = full_cfg['metadata']['run_mode']['zenodo_id']
+    zip_filename = f"OSCAR_lib_tier1_configured_{hist_type}_{region}.zip"
     url = f"{full_cfg['metadata']['zenodo_base_url']}{record_id}/files/{zip_filename}/content"
     
     # Path to temporarily store the zip during download
-    # (Put it one level up in the CMIP6 folder)
     zip_temp_path = target_dir.parent / zip_filename
     zip_temp_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -66,10 +65,11 @@ def ensure_configured_library(hist_type, region):
 
 
 def ensure_customized_library():
-    """
-    Ensures the full Customized library is present locally.
-    If missing, downloads the single bundle from the configured Zenodo record
-    and extracts it into {data_root}/library/customized/.
+    """Ensures the full Customized library is present locally.
+
+    If missing, downloads OSCAR_lib_tier2_customized.zip from the configured
+    Zenodo record and extracts it into
+    {data_root}/library/run_mode/tier2_customized/.
     """
     target_dir = get_paths()["customized_library"]
     if target_dir is None:
@@ -77,15 +77,15 @@ def ensure_customized_library():
             "No user data directory configured. "
             "Please run oscar.set_data_dir('/your/path') first."
         )
-    
+
     marker_file = target_dir / "templates" / "settings_template.yaml"
     if marker_file.exists():
         return target_dir
 
     full_cfg = load_config()
-    metadata = full_cfg['metadata']
-    record_id = metadata['customized']['zenodo_id']
-    zenodo_base_url = metadata['zenodo_base_url']
+    metadata = full_cfg["metadata"]
+    record_id = metadata["run_mode"]["zenodo_id"]
+    zenodo_base_url = metadata["zenodo_base_url"]
 
     if not record_id:
         raise RuntimeError(
@@ -96,7 +96,7 @@ def ensure_customized_library():
     record_api_url = f"{zenodo_base_url}{record_id}"
 
     print("\n[OSCAR] Customized library not found locally.")
-    print("[OSCAR] Please wait, fetching full customized bundle from Zenodo...")
+    print("[OSCAR] Please wait, fetching customized bundle from Zenodo...")
 
     zip_temp_path = None
     try:
@@ -104,20 +104,22 @@ def ensure_customized_library():
         record_resp.raise_for_status()
         record_data = record_resp.json()
 
+        target_filename = "OSCAR_lib_tier2_customized.zip"
         files = record_data.get("files", [])
-        zip_files = [f for f in files if str(f.get("key", "")).lower().endswith(".zip")]
-        if len(zip_files) != 1:
+        matching_files = [f for f in files if f.get("key") == target_filename]
+
+        if not matching_files:
             raise RuntimeError(
-                f"Expected exactly one zip in customized Zenodo record {record_id}, "
-                f"found {len(zip_files)}."
+                f"Expected file '{target_filename}' in Zenodo record "
+                f"{record_id}, but it was not found."
             )
 
-        zip_info = zip_files[0]
-        zip_name = zip_info.get("key", "customized_library.zip")
+        zip_info = matching_files[0]
+        zip_name = zip_info.get("key", target_filename)
         zip_url = zip_info.get("links", {}).get("self")
         if not zip_url:
             raise RuntimeError(
-                "Could not find a downloadable link for the customized bundle in "
+                f"Could not find a downloadable link for {target_filename} in "
                 f"Zenodo record {record_id}."
             )
 
@@ -126,13 +128,13 @@ def ensure_customized_library():
 
         response = requests.get(zip_url, stream=True, timeout=120)
         response.raise_for_status()
-        with open(zip_temp_path, 'wb') as f:
+        with open(zip_temp_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
                 if chunk:
                     f.write(chunk)
 
         print(f"[OSCAR] Extracting: {zip_name}")
-        with zipfile.ZipFile(zip_temp_path, 'r') as zip_ref:
+        with zipfile.ZipFile(zip_temp_path, "r") as zip_ref:
             zip_ref.extractall(target_dir)
 
         if not marker_file.exists():
@@ -141,7 +143,9 @@ def ensure_customized_library():
                 f"was not found: {marker_file}"
             )
 
-        print(f"[OSCAR] Setup complete. Customized library ready at {target_dir}")
+        print(
+            f"[OSCAR] Setup complete. Customized library ready at {target_dir}"
+        )
 
     except Exception as e:
         raise RuntimeError(

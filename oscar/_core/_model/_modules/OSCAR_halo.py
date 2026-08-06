@@ -24,8 +24,8 @@ OSCAR_halo.process(
     units = 'yr-1')
 
 def Eq__v_Xhalo_OH(Par):
-    if 'f_kOH_pd' not in Par: return None
-    return Par.v_Xhalo_OH_pd / Par.f_kOH_pd
+    if 'r_kOH_pd' not in Par: return None
+    return Par.v_Xhalo_OH_pd / Par.r_kOH_pd
 
 
 ## preindustrial stratospheric sink rate
@@ -35,8 +35,8 @@ OSCAR_halo.process(
     units = 'yr-1')
 
 def Eq__v_Xhalo_hv(Par):
-    if 'f_hv_pd' not in Par: return None
-    return Par.v_Xhalo_hv_pd / Par.f_hv_pd
+    if 'r_hv_pd' not in Par: return None
+    return Par.v_Xhalo_hv_pd / Par.r_hv_pd
 
 
 ## halogenated compounds preindustrial lifetime
@@ -71,25 +71,25 @@ def Eq__Fsink_Xhalo_pi(Par):
 ## halogenated compounds tropospheric hydroxyl sink
 OSCAR_halo.process(
     Out = 'D_Foh_Xhalo', 
-    In = ('f_kOH', 'D_Xhalo'), 
+    In = ('r_kOH', 'D_Xhalo'), 
     Eq = lambda Var, Par: Eq__D_Foh_Xhalo(Var, Par), 
     units = 'Gg yr-1', 
     core_dims=['spc_halo'])
 
 def Eq__D_Foh_Xhalo(Var, Par):
-    return Par.a_Xhalo * Par.v_Xhalo_OH * ((Par.Xhalo_pi + Var.D_Xhalo) * Var.f_kOH - Par.Xhalo_pi)
+    return Par.a_Xhalo * Par.v_Xhalo_OH * ((Par.Xhalo_pi + Var.D_Xhalo) * Var.r_kOH - Par.Xhalo_pi)
 
 
 ## halogenated compounds stratospheric sink
 OSCAR_halo.process(
     Out = 'D_Fhv_Xhalo', 
-    In = ('f_hv', 'D_Xhalo'), 
+    In = ('r_hv', 'D_Xhalo'), 
     Eq = lambda Var, Par: Eq__D_Fhv_Xhalo(Var, Par), 
     units = 'Gg yr-1', 
     core_dims=['spc_halo'])
 
 def Eq__D_Fhv_Xhalo(Var, Par):
-    return Par.a_Xhalo * Par.v_Xhalo_hv * ((Par.Xhalo_pi + Var.D_Xhalo) * Var.f_hv - Par.Xhalo_pi)
+    return Par.a_Xhalo * Par.v_Xhalo_hv * ((Par.Xhalo_pi + Var.D_Xhalo) * Var.r_hv - Par.Xhalo_pi)
 
 
 ## halogenated compounds tropospheric other sinks combined
@@ -140,6 +140,8 @@ def Eq__d_Xhalo(Var, Par):
     return 1 / Par.a_Xhalo * (sum_reg(Var.D_Eant_Xhalo) - Var.D_Fsink_Xhalo + Var.D_Emiss_Xhalo)
 
 
+## ADDITIONAL DIAGNOSTICS
+
 ## halogenated compounds residual emissions (= budget imbalance)
 ## note: non-zero only if d_Xhalo is prescribed!
 OSCAR_halo.process(
@@ -173,7 +175,7 @@ OSCAR_halo.process(
     units = 'ppt')
 
 def Eq__Xhalo(Var, Par):
-    return Par.Xhalo_pi + Var.D_Xhalo
+    return Var.D_Xhalo + Par.Xhalo_pi
 
 
 ##=====================

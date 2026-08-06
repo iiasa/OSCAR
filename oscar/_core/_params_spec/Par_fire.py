@@ -1,8 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from core.fct_load import load_precalib_params
-from input_data.params_spec.Cst import Cst
+from oscar._core._params_spec.Cst import Cst
+from oscar._core._base.fct_load import load_precalib_params
 
 
 ##==================

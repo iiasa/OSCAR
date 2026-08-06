@@ -3,7 +3,7 @@ import xarray as xr
 
 from scipy.optimize import fsolve
 
-from input_data.params_spec.Cst import Cst
+from oscar._core._params_spec.Cst import Cst
 
 
 ##==================

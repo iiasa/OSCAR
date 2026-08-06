@@ -1,14 +1,8 @@
 import numpy as np
 import xarray as xr
 
-<<<<<<<< HEAD:oscar/_core/_params_spec/Par_landC_bk.py
-from core.fct_load import load_precalib_params
-from input_data.params_spec.Cst import Cst
-========
-from oscar._io.paths import get_paths
 from oscar._core._params_spec.Cst import Cst
-path_precalib_out = get_paths()["params_precalib"]
->>>>>>>> bq/main:oscar/_core/_params_spec/Par_landC_luc.py
+from oscar._core._base.fct_load import load_precalib_params
 
 
 ##==================

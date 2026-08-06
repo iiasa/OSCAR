@@ -38,9 +38,9 @@ OSCAR_NatEm.process(
     units = 'Tg yr-1')
 
 def Eq__Enat_BVOC_pi(Par):
-    f_lcc = 1 + Par.i_BVOC_Afor * (Par.Aland_pd.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) / Par.Aland_pi.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) - 1)
-    f_T = safe_exp(Par.g_BVOC * Par.D_Tg_pd, 5.)
-    return Par.Enat_BVOC_pd / f_lcc / f_T
+    fct_lcc = 1 + Par.i_BVOC_Afor * (Par.Aland_pd.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) / Par.Aland_pi.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) - 1)
+    fct_T = safe_exp(Par.g_BVOC * Par.D_Tg_pd, 5.)
+    return Par.Enat_BVOC_pd / fct_lcc / fct_T
 
 
 ## present-day LNOx emissions
@@ -108,9 +108,9 @@ OSCAR_NatEm.process(
     units = 'Tg yr-1')
 
 def Eq__D_Enat_BVOC(Var, Par):
-    f_lcc = 1 + Par.i_BVOC_Afor * Var.D_Aland.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) / Par.Aland_pi.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1)
-    f_T = safe_exp(Par.g_BVOC * Var.D_Tg, 5.)
-    return Par.Enat_BVOC_pi * (f_lcc * f_T - 1)
+    fct_lcc = 1 + Par.i_BVOC_Afor * Var.D_Aland.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1) / Par.Aland_pi.sel(bio_land='Forest', drop=True).sum('reg_land', min_count=1)
+    fct_T = safe_exp(Par.g_BVOC * Var.D_Tg, 5.)
+    return Par.Enat_BVOC_pi * (fct_lcc * fct_T - 1)
 
 
 ## lightning NOx emissions
@@ -135,4 +135,72 @@ OSCAR_NatEm.process(
 
 def Eq__D_Enat_SNOx(Var, Par):
     return 0.
+
+
+## ADDITIONAL DIAGNOSTICS
+
+## total mineral dust emissions
+OSCAR_NatEm.process(
+    Out = 'Edust', 
+    In = ('D_Edust',), 
+    Eq = lambda Var, Par: Eq__Edust(Var, Par), 
+    units = 'Tg yr-1')
+
+def Eq__Edust(Var, Par):
+    return Var.D_Edust + Par.Edust_pi
+
+
+## total sea salt emissions
+OSCAR_NatEm.process(
+    Out = 'Esalt', 
+    In = ('D_Esalt',), 
+    Eq = lambda Var, Par: Eq__Esalt(Var, Par), 
+    units = 'Tg yr-1')
+
+def Eq__Esalt(Var, Par):
+    return Var.D_Esalt + Par.Esalt_pi
+
+
+## total oceanic DMS emissions
+OSCAR_NatEm.process(
+    Out = 'Enat_DMS', 
+    In = ('D_Enat_DMS',), 
+    Eq = lambda Var, Par: Eq__Enat_DMS(Var, Par), 
+    units = 'TgS yr-1')
+
+def Eq__Enat_DMS(Var, Par):
+    return Var.D_Enat_DMS + Par.Enat_DMS_pi
+
+
+## total biogenic VOC emissions
+OSCAR_NatEm.process(
+    Out = 'Enat_BVOC', 
+    In = ('D_Enat_BVOC',), 
+    Eq = lambda Var, Par: Eq__Enat_BVOC(Var, Par), 
+    units = 'Tg yr-1')
+
+def Eq__Enat_BVOC(Var, Par):
+    return Var.D_Enat_BVOC + Par.Enat_BVOC_pi
+
+
+## total lightning NOx emissions
+OSCAR_NatEm.process(
+    Out = 'Enat_LNOx', 
+    In = ('D_Enat_LNOx',), 
+    Eq = lambda Var, Par: Eq__Enat_LNOx(Var, Par), 
+    units = 'TgN yr-1')
+
+def Eq__Enat_LNOx(Var, Par):
+    return Var.D_Enat_LNOx + Par.Enat_LNOx_pi
+
+
+## total soil NOx emissions
+OSCAR_NatEm.process(
+    Out = 'Enat_SNOx', 
+    In = ('D_Enat_SNOx',), 
+    Eq = lambda Var, Par: Eq__Enat_SNOx(Var, Par), 
+    units = 'TgN yr-1')
+
+def Eq__Enat_SNOx(Var, Par):
+    return Var.D_Enat_SNOx + Par.Enat_SNOx_pi
 

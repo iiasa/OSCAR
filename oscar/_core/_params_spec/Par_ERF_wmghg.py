@@ -1,11 +1,10 @@
 import numpy as np
 import xarray as xr
 
-from oscar._io.paths import get_paths
 from oscar._core._params_spec.Cst import Cst
+from oscar._core._base.fct_load import load_precalib_params
 from oscar._core._params_spec.Par_halo import get_params as get_params_halo
 
-path_precalib_out = get_paths()["params_precalib"]
 
 ## get list of halogenated compounds
 spc_halo = get_params_halo().spc_halo
@@ -23,7 +22,7 @@ def get_params(**useless):
 
     ## dimensions
     ## uncertainty
-    Par.coords['unc_Norm'] = ['mean', 'std']
+    Par.coords['unc_LogNorm'] = ['mean', 'std']
 
     ## list of species
     Par.coords['spc_halo'] = spc_halo
@@ -32,15 +31,15 @@ def get_params(**useless):
     ## CO2, CH4 and N2O
     ## load precalibrated SARF parameters
     ## (Etminan et al., 2016; https://doi.org/10.1002/2016GL071930)
-    with xr.open_dataset(path_precalib_out + f'radiative-forcing_Etminan-2016.nc') as TMP:
-        for var in TMP: Par[var] = TMP[var].load()
+    Par_tmp = load_precalib_params('radiative-forcing_Etminan-2016', xxx_global=True)
+    Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
 
     ## ERF tropospheric adjustment factors
     ## (Smith et al., 2021; https://www.ipcc.ch/report/ar6/wg1/) (Sections 7.SM.1.3.1 & 7.SM.1.3.2)
     ## note: adding total uncertainty to this factor is arbitrary
-    Par['a_adj_CO2'] = xr.DataArray(1.05 * np.array([1., 0.12 / Cst.s1_to_p90]), dims='unc_Norm', attrs={'units': '1'})
-    Par['a_adj_CH4'] = xr.DataArray(0.86 * np.array([1., 0.20 / Cst.s1_to_p90]), dims='unc_Norm', attrs={'units': '1'})
-    Par['a_adj_N2O'] = xr.DataArray(1.07 * np.array([1., 0.16 / Cst.s1_to_p90]), dims='unc_Norm', attrs={'units': '1'})
+    Par['a_adj_CO2'] = xr.DataArray(1.05 * np.array([1., 0.12 / Cst.s1_to_p90]), dims='unc_LogNorm', attrs={'units': '1'})
+    Par['a_adj_CH4'] = xr.DataArray(0.86 * np.array([1., 0.20 / Cst.s1_to_p90]), dims='unc_LogNorm', attrs={'units': '1'})
+    Par['a_adj_N2O'] = xr.DataArray(1.07 * np.array([1., 0.16 / Cst.s1_to_p90]), dims='unc_LogNorm', attrs={'units': '1'})
 
 
     ## halogenated compounds
@@ -59,7 +58,7 @@ def get_params(**useless):
     ## ERF uncertainty factor
     ## (Smith et al., 2021; https://www.ipcc.ch/report/ar6/wg1/) (Section 7.SM.1.3.2)
     ## note: arbitrary doubling of uncertainty because applied to each gas separately
-    Par['k_ph_halo'] = xr.DataArray([[1., 2*0.19 / Cst.s1_to_p90] for _ in range(len(Par.spc_halo))], dims=['spc_halo', 'unc_Norm'], attrs={'units': '1'})
+    Par['k_ph_halo'] = xr.DataArray([[1., 2*0.19 / Cst.s1_to_p90] for _ in range(len(Par.spc_halo))], dims=['spc_halo', 'unc_LogNorm'], attrs={'units': '1'})
 
 
     ## RETURN

@@ -2,10 +2,12 @@ import warnings
 import numpy as np
 import xarray as xr
 
-from core.paths import path_precalib_in
+from oscar._io.paths import get_paths
 from oscar._core._base.fct_precalib import run_precalib, make_one_fit, get_best_fit
 
 path_precalib_in = get_paths()["precalib_data"]
+
+
 name = 'radiative-forcing_Etminan-2016'
 
 
@@ -23,7 +25,7 @@ def precalib_params(no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data
-        with xr.open_dataset(path_precalib_in + f'{name}.nc') as TMP:
+        with xr.open_dataset(path_precalib_in / f'{name}.nc') as TMP:
             ds = TMP.load()
 
         ## define reference state

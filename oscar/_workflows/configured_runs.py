@@ -3,19 +3,22 @@ OSCAR - Configured Workflow
 Scientific projections using official pre-compiled CMIP libraries.
 """
 import xarray as xr
-from .._utils.load_config import load_config
-from .._io.paths import get_paths
-from .._io._download import ensure_configured_library
-from .._core._model.OSCAR import OSCAR
-from .._utils.metadata import apply_variable_metadata
+
+from oscar._io.paths import get_paths
+from oscar._io._download import ensure_configured_library
+from oscar._utils.load_config import load_config
+from oscar._utils.metadata import apply_variable_metadata
+
+from oscar._core._model.OSCAR import OSCAR
 
 def run_configured(
     scenario=None,  # user-selected scenario(s)
     region=None,    # user-selected region
     hist_type=None, # user-selected historical dataset
     variables=None, # user-selected output variables
-    show_plot=True, 
-    run_model=True, 
+    show_plot=True, # summary plot is shown by default
+    run_model=True, # model is run by default
+    # other kwargs are passed to OSCAR
     **kwargs
 ):
     # 1. LOAD CONFIGURATION (Source of Truth)
@@ -44,6 +47,13 @@ def run_configured(
     
     n_mc = cfg_mode['official_nMC']
 
+    # define allowed scenarios
+    scen_nr = hist_final[-1]  # Extracts the number from 'CMIP6' or 'CMIP7'
+    allowed_scenarios = registry['all_scens'][f'scen{scen_nr}']
+
+    # define allowed variables
+    allowed_variables = cfg_full['v_all'] 
+
     # Setup Output Path
     out_dir = get_paths()['results'] / "configured_run"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -54,9 +64,9 @@ def run_configured(
         _validate_choice(hist_final, cfg_mode['allowed_hist'], "hist_type")
         _validate_choice(region_final, cfg_mode['allowed_regions'], "region")
         for s in scen_final:
-            _validate_choice(s, cfg_mode['allowed_scenarios'], "scenario")
+            _validate_choice(s, allowed_scenarios, "scenario")
         for v in vars_final:
-            _validate_choice(v, cfg_mode['allowed_variables'], "variable")
+            _validate_choice(v, allowed_variables, "variable")
 
         # 4. LOAD LIBRARY COMPONENTS
         print(f"Loading official library for {region_final} ({n_mc} members)...")
@@ -72,26 +82,17 @@ def run_configured(
         print(f"Library components loaded from: {lib_path}")
         
         # 5. PREPARE INPUTS
-        For_scen = scen_forcing.sel(
-            scen=scen_final, 
-            year=slice(scen_start_year, scen_end_year)
-        )
+        For_scen = scen_forcing.sel(scen=scen_final,year=slice(scen_start_year, scen_end_year))
         
         # 6. EXECUTE PROJECTION
         print(f"Running OSCAR (configured mode) for scenarios: {scen_final}")
         # nt=4 for parallel processing
-        Out_scen = OSCAR(
-            Ini=ini_state, 
-            Par=params, 
-            For=For_scen, 
-            nt=4, 
-            var_keep=vars_final, 
-            **kwargs
-        )
+        Out_scen = OSCAR(Ini=ini_state, Par=params, For=For_scen, var_keep=vars_final, **kwargs)
         
         # 7. COMBINE & APPLY METADATA
         print("Concatenating with history and applying metadata...")
         # Slice historical results to only include user-requested variables
+        hist_results = hist_results.drop_vars('scen').expand_dims(scen=['Historical'])
         Out_all = xr.concat([hist_results[vars_final], Out_scen[vars_final]], dim='year')
         Out_all = apply_variable_metadata(Out_all)
 
@@ -106,14 +107,8 @@ def run_configured(
         Out_all = xr.open_dataset(out_file).load()
 
     # 9. PLOT SUMMARY
-    from .._viz import plot_timeseries_summary
-    plot_timeseries_summary(
-        Out_all, 
-        hist_end_year, 
-        vars_final, 
-        out_dir=out_dir, 
-        show_plot=show_plot
-    )
+    from oscar._viz import plot_timeseries_summary
+    plot_timeseries_summary(Out_all, hist_end_year, vars_final, out_dir=out_dir, show_plot=show_plot)
     
     return Out_all
 

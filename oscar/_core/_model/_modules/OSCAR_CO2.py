@@ -68,6 +68,8 @@ def Eq__d_CO2(Var, Par):
     return 1 / Par.a_CO2 * (sum_reg(Var.D_Eff) + sum_reg(Var.D_Eluc) + Var.D_Foxi_CH4 - Var.D_Fsink_CO2 + Var.D_Emiss_CO2)
 
 
+## ADDITIONAL DIAGNOSTICS
+
 ## CO2 residual emissions (= budget imbalance)
 ## note: non-zero only if d_CO2 is prescribed!
 OSCAR_CO2.process(

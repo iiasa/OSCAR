@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 
 from oscar._core._base.cls_main import Model
+from oscar._core._base.fct_solve import safe_exp
 
 
 #####################################################################
@@ -42,13 +43,13 @@ OSCAR_oceanC.process(
     units = 'ppm')
 
 def Eq__D_pCO2(Var, Par):
-    D_pCO2 = ((1.5568 - 1.3993E-2 * Par.To_0) * Var.D_dic
+    D_pCO2_dic = ((1.5568 - 1.3993E-2 * Par.To_0) * Var.D_dic
             + (7.4706 - 0.20207 * Par.To_0) * 1E-3 * Var.D_dic ** 2
             - (1.2748 - 0.12015 * Par.To_0) * 1E-5 * Var.D_dic ** 3
             + (2.4491 - 0.12639 * Par.To_0) * 1E-7 * Var.D_dic ** 4
             - (1.5468 - 0.15326 * Par.To_0) * 1E-10 * Var.D_dic ** 5)
-    D_pCO2 = (Par.CO2_pi + Par.k_b_dic * D_pCO2) * np.exp(0.0423 * Par.k_g_dic * Var.D_Tg) - Par.CO2_pi
-    return D_pCO2
+    fct_T = safe_exp(0.0423 * Par.k_g_dic * Var.D_Tg, 5.)
+    return (Par.CO2_pi + Par.k_b_dic * D_pCO2_dic) * fct_T - Par.CO2_pi
 
 
 ## dissolved inorganic carbon in the surface layer

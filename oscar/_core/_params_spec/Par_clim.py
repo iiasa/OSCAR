@@ -1,10 +1,9 @@
 import numpy as np
 import xarray as xr
 
-from oscar._io.paths import get_paths
 from oscar._core._params_spec.Cst import Cst
+from oscar._core._base.fct_load import load_precalib_params
 
-path_precalib_out = get_paths()["params_precalib"]
 
 ##==================
 ##==================
@@ -21,10 +20,29 @@ def get_params(mod_region, **useless):
     Par.coords['unc_LogitNorm'] = ['mean', 'std']
 
 
+    ## global preindustrial baseline (1850-1900)
+    ## note: expert judgement (NOAA: 13.7, NASA-GISS: ~13.7, Copernicus: ~13.5, HadCRUT: ~13.5, Berkeley: ~13.8)
+    Par['Tg_pi'] = xr.DataArray([13.65 + Cst.degC_to_K.values, 0.4], dims='unc_LogNorm', attrs={'units': '1'})
+
+
     ## global temperature and precipitation
     ## load precalibrated parameters
-    with xr.open_dataset(path_precalib_out + f'global-climate_CMIP6.nc') as TMP:
-        for var in TMP: Par[var] = TMP[var].load()
+    Par_tmp = load_precalib_params('global-climate_CMIP6')
+    Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
+
+    ## ECS correction to remove feedback from natural emissions
+    ## (Thornhill et al., 2021; https://doi.org/10.5194/acp-21-1105-2021) (Tables 6, 7, 8, 9, 10, 11 & 12)
+    lambda_NatEm = xr.DataArray(coords={'mod_clim': ['CNRM-ESM2-1', 'UKESM1-0-LL', 'MIROC6', 'NorESM2-LM', 'GFDL-ESM4', 'CESM2-WACCM', 'GISS-E2-1-G']}, dims=['mod_clim']).fillna(0.)
+    lambda_NatEm += [0.0048, -0.0006, -0.016, 0., -0.0006, 0., -0.0077] # dust (AOD)
+    lambda_NatEm += [-0.049, 0., -0.015, 0., -0.130, 0., -0.015] # salt (AOD)
+    lambda_NatEm += [0., 0.027, 0., 0.0125, 0., 0., -0.0006] # DMS
+    lambda_NatEm += [0., 0.001, 0., -0.28, -0.079, -0.084, -0.015] # BVOC (aerosols)
+    lambda_NatEm += [0., 0.005, 0., 0., 0.013, 0.014, 0.014] # BVOC (ozone)
+    lambda_NatEm += [0., 0.005-0.009, 0., 0., -0.001--0.001, 0.017-0.016, 0.013-0.014] # LNOx (aerosols)
+    lambda_NatEm += [0., 0.009, 0., 0., -0.001, 0.016, 0.014] # LNOx (ozone)
+    lambda_NatEm += [0., -0.079, 0., 0., -0.062, 0., -0.050] # climate (ozone)
+    Par['lambda_0'] = Par.lambda_0 - lambda_NatEm.combine_first(0 * Par.lambda_0)
+
 
     ## fraction of energy warming up the ocean
     ## (Forster et al., 2021; https://doi.org/10.1017/9781009157896.009) (Table 7.1)
@@ -47,8 +65,14 @@ def get_params(mod_region, **useless):
 
     ## regional temperature and precipitation
     ## load precalibrated parameters
-    with xr.open_dataset(path_precalib_out + f'regional-climate_CMIP6__{mod_region}.nc') as TMP:
-        for var in TMP: Par[var] = TMP[var].load()
+    Par_tmp = load_precalib_params('regional-climate_CMIP6', mod_region, xxx_global=True)
+    Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
+
+    ## keep only preindustrial local precipitation for relative change
+    Par = Par.drop_vars(['Tg_piC', 'Tl_piC', 'Pg_piC'])
+
+    ## no noise for preindustrial local precipitation
+    Par['Pl_piC'].attrs['mod_noise_override'] = 0.
 
 
     ## RETURN

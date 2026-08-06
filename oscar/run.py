@@ -42,7 +42,10 @@ def run(mode="standard", **kwargs):
     # 1. MODE: STANDARD (Instant verification using internal bootstrap)
     if mode == "standard":
         from oscar._workflows import standard_run
-        return standard_run.run_standard(**kwargs)
+        Out_all, msg = standard_run.run_standard(**kwargs)
+        print(Out_all)
+        print(msg)
+        return None
 
     # 2. DATA CHECK (For scientific modes: configured, customized, advanced)
     # This checks for a saved path OR a manually provided 'data_dir' argument.

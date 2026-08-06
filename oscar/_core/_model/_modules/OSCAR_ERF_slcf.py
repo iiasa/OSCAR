@@ -41,8 +41,8 @@ OSCAR_ERF_slcf.process(
 def Eq__ph2_ari_SO2(Par):
     if 'Etot_SO2_pi' not in Par: return None
     Etot_SO2_pd = sum_reg(Par.Eant_SO2_pd) + sum_reg(Par.Ebb_SO2_pd)
-    f_T = safe_exp(Par.g_tau_SO4 * Par.D_Tg_pd, 5.)
-    return Par.ph_ari_SO2 * (Etot_SO2_pd - Par.Etot_SO2_pi) / (f_T * Etot_SO2_pd - Par.Etot_SO2_pi)
+    fct_T = safe_exp(Par.g_tau_SO4 * Par.D_Tg_pd, 5.)
+    return Par.ph_ari_SO2 * (Etot_SO2_pd - Par.Etot_SO2_pi) / (fct_T * Etot_SO2_pd - Par.Etot_SO2_pi)
 
 
 ## aerosol-radiation interaction efficiency to mineral dust emissions
@@ -75,10 +75,10 @@ def Eq__Eaci_SO2(Par):
     if 'Ebb_SO2_pi' not in Par: return None
     if 'Ebb_BC_pi' not in Par: return None
     if 'Ebb_OC_pi' not in Par: return None
-    f_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
-    f_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
-    f_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
-    return (1 + f_SO2 + f_BC + f_OC) / Par.i_aci_SO2
+    fct_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
+    fct_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
+    fct_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
+    return (1 + fct_SO2 + fct_BC + fct_OC) / Par.i_aci_SO2
 
 
 ## aerosol-cloud interaction BC saturation emissions
@@ -91,10 +91,10 @@ def Eq__Eaci_BC(Par):
     if 'Ebb_SO2_pi' not in Par: return None
     if 'Ebb_BC_pi' not in Par: return None
     if 'Ebb_OC_pi' not in Par: return None
-    f_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
-    f_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
-    f_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
-    return (1 + f_SO2 + f_BC + f_OC) / Par.i_aci_BC
+    fct_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
+    fct_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
+    fct_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
+    return (1 + fct_SO2 + fct_BC + fct_OC) / Par.i_aci_BC
 
 
 ## aerosol-cloud interaction OC saturation emissions
@@ -107,10 +107,10 @@ def Eq__Eaci_OC(Par):
     if 'Ebb_SO2_pi' not in Par: return None
     if 'Ebb_BC_pi' not in Par: return None
     if 'Ebb_OC_pi' not in Par: return None
-    f_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
-    f_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
-    f_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
-    return (1 + f_SO2 + f_BC + f_OC) / Par.i_aci_OC
+    fct_SO2 = Par.i_aci_SO2 * (sum_reg(Par.Eant_SO2_pi) + sum_reg(Par.Ebb_SO2_pi))
+    fct_BC = Par.i_aci_BC * (sum_reg(Par.Eant_BC_pi) + sum_reg(Par.Ebb_BC_pi))
+    fct_OC = Par.i_aci_OC * (sum_reg(Par.Eant_OC_pi) + sum_reg(Par.Ebb_OC_pi))
+    return (1 + fct_SO2 + fct_BC + fct_OC) / Par.i_aci_OC
 
 
 ##=====================
@@ -312,8 +312,8 @@ OSCAR_ERF_slcf.process(
     units = 'W m-2')
 
 def Eq__ERF_ari_SO2(Var, Par):
-    f_T = safe_exp(Par.g_tau_SO4 * Var.D_Tg, 5.)
-    return Par.ph2_ari_SO2 * (f_T * (Par.Etot_SO2_pi + sum_reg(Var.D_Eant_SO2) + sum_reg(Var.D_Ebb_SO2)) - Par.Etot_SO2_pi)
+    fct_T = safe_exp(Par.g_tau_SO4 * Var.D_Tg, 5.)
+    return Par.ph2_ari_SO2 * (fct_T * (Par.Etot_SO2_pi + sum_reg(Var.D_Eant_SO2) + sum_reg(Var.D_Ebb_SO2)) - Par.Etot_SO2_pi)
 
 
 ## NH3-induced aerosol-radiation interactions

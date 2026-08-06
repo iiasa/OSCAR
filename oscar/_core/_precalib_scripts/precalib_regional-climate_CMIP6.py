@@ -6,7 +6,9 @@ import xarray as xr
 from oscar._io.paths import get_paths
 from oscar._core._base.fct_precalib import run_precalib, get_best_fit
 from oscar._core._base.fct_regions import aggreg_regions
+
 path_precalib_in = get_paths()["precalib_data"]
+
 
 name = 'regional-climate_CMIP6'
 
@@ -25,7 +27,7 @@ def precalib_params(mod_region, no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data
-        with xr.open_dataset(path_precalib_in + '{}.nc'.format(name.replace('regional-',''))) as TMP:
+        with xr.open_dataset(path_precalib_in / '{}.nc'.format(name.replace('regional-',''))) as TMP:
             ds = TMP.sel(exp=['piControl', 'historical'] + [exp for exp in TMP.exp.values if 'ssp' in exp])
             ds = ds.drop_vars([var for var in ds if var not in ['tas', 'pr', '_area']]).dropna('year', how='all')
             ds = aggreg_regions(ds, mod_region, weight_var={'tas': '_area', 'pr': '_area'})
@@ -48,10 +50,10 @@ def precalib_params(mod_region, no_warnings=True):
 
         ## STEP 0
         ## preindustrial climate
-        Par['Tg_pi'] = ds['tas'].sel(exp='piControl', drop=True).mean('year')
-        Par['Pg_pi'] = ds['pr'].sel(exp='piControl', drop=True).mean('year')
-        Par['Tl_pi'] = ds['lst'].sel(exp='piControl', drop=True).mean('year')
-        Par['Pl_pi'] = ds['lsp'].sel(exp='piControl', drop=True).mean('year')
+        Par['Tg_piC'] = ds['tas'].sel(exp='piControl', drop=True).mean('year')
+        Par['Pg_piC'] = ds['pr'].sel(exp='piControl', drop=True).mean('year')
+        Par['Tl_piC'] = ds['lst'].sel(exp='piControl', drop=True).mean('year')
+        Par['Pl_piC'] = ds['lsp'].sel(exp='piControl', drop=True).mean('year')
 
 
         ## STEP 1

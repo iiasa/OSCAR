@@ -1,10 +1,8 @@
 import numpy as np
 import xarray as xr
 
-from oscar._io.paths import get_paths
 from oscar._core._params_spec.Cst import Cst
-
-path_precalib_out = get_paths()["params_precalib"]
+from oscar._core._base.fct_load import load_precalib_params
 
 
 ##==================
@@ -23,25 +21,32 @@ def get_params(mod_region, **useless):
 
     ## land C cycle (preindustrial and sensitivities)
     ## load precalibrated parameters
-    with xr.open_dataset(path_precalib_out + f'land_TRENDY__{mod_region}.nc') as TMP:
-        for var in TMP: Par[var] = TMP[var].load()
+    Par_tmp = load_precalib_params('land_TRENDY', mod_region, xxx_global=True)
+    Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
+
+    ## take these as true preindustrial climate
+    Par = Par.rename({'Tl_piL': 'Tl_pi', 'Pl_piL': 'Pl_pi'})
+
+    ## set zero fire in Cropland and Urban biomes
+    Par['v_fire'].loc[{'bio_land': ['Cropland', 'Urban']}] = 0.
 
     ## additional uncertainty factor
     ## note: to span a broader range than TRENDY models
     Par['k_npp'] = xr.DataArray([[[1., 0.2] for _ in range(len(Par.bio_land))] for _ in range(len(Par.reg_land))], dims=['reg_land', 'bio_land', 'unc_LogNorm'], attrs={'units': '1'})
+    #Par['k_npp'] = xr.DataArray(1., attrs={'units': '1'})
 
     ## no noise for fraction parameters
-    Par['p_harv'].attrs['mod_noise_override'] = 0.
+    Par['p_charv'].attrs['mod_noise_override'] = 0.
     Par['p_graz'].attrs['mod_noise_override'] = 0.
 
     ## use Dirichlet distribution for fraction parameters
-    Par = Par.rename({'mod_Eharv': 'dir_Eharv', 'mod_Egraz': 'dir_Egraz'})
+    Par = Par.rename({'mod_Echarv': 'dir_Echarv', 'mod_Egraz': 'dir_Egraz'})
 
 
     ## land C cycle (subpool partitioning)
     ## load precalibrated parameters
-    with xr.open_dataset(path_precalib_out + f'land_ISIMIP3a__{mod_region}.nc') as TMP:
-        for var in TMP: Par[var] = TMP[var].load()
+    Par_tmp = load_precalib_params('land_ISIMIP3a', mod_region, xxx_global=True)
+    Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
 
     ## no noise for fraction parameters
     Par['p_wood'].attrs['mod_noise_override'] = 0.
@@ -55,22 +60,22 @@ def get_params(mod_region, **useless):
 
     ## coarse woody debris decay
     ## (Harmon et al., 2020; https://doi.org/10.1186/s13021-019-0136-6) (Table 1)
-    Par['v10_cwd'] = xr.DataArray([0.061, 0.006], dims='unc_LogNorm', attrs={'units': '1'})
+    Par['v10_cwd'] = xr.DataArray([0.061, 0.006], dims='unc_LogNorm', attrs={'units': 'yr-1'})
     Par['q10_cwd'] = xr.DataArray([2.50, 0.20], dims='unc_LogNorm', attrs={'units': '1'})
 
     ## respiration fraction of CWD
     ## (Stokland et al., 2024; https://doi.org/10.1007/s10533-024-01170-y) (Conclusion)
     ## note: no real data for tropics, assumed similar
     ## note: arbitrary uncertainty
-    Par['p_cwd_resp'] = xr.DataArray([0.6, 0.1], dims='unc_LogitNorm', attrs={'units': '1'})
+    Par['p_cwd_resp'] = xr.DataArray([[[0.6, 0.1] for _ in range(len(Par.bio_land))] for _ in range(len(Par.reg_land))], dims=['reg_land', 'bio_land', 'unc_LogitNorm'], attrs={'units': '1'})
 
 
-    ## litterfall as fraction of NPP
-    ## (Neumann et al., 2018; https://doi.org/10.1029/2017GB005825) (Section 4)
-    ## (Chave et al., 2010; https://doi.org/10.5194/bg-7-43-2010) (Introduction)
-    ## note: no clean source but around 1/3 of NPP seems robust across literature
-    ## note: arbitrary uncertainty
-    Par['p_fall_npp'] = xr.DataArray([0.35, 0.05], dims='unc_LogitNorm', attrs={'units': '1'})
+    ## fraction of npp going to woody biomass
+    ## (Xia et al., 2019; https://doi.org/10.1029/2018JG004777) (Figure 2)
+    ## (Lu et al., 2025; https://doi.org/10.1111/jbi.15094) (Supplementary Information)
+    ## (Malhi et al.https://doi.org/10.1098/rstb.2011.0062) (Abstract)
+    ## note: rounded value, uncertainty from third study
+    Par['p_npp_wood'] = xr.DataArray([[[0.4, 0.1] for _ in range(len(Par.bio_land))] for _ in range(len(Par.reg_land))], dims=['reg_land', 'bio_land', 'unc_LogitNorm'], attrs={'units': '1'})
 
 
     ## RETURN

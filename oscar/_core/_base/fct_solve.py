@@ -12,7 +12,7 @@ def safe_exp(x, f_max=5., nf=5.):
     return np.exp(x - 1/nf * np.log1p(np.exp(nf * (x - np.log(f_max)))) + 1/nf * np.log1p(np.exp(-nf * np.log(f_max))))
 
 
-## moving boundary as a function of flux rate
+## moving cap as a function of flux rate
 ## note: close to 1/v**nl for v<<1, anchors at 2 for v=1, quickly goes to 1 for v>>1
 def f_max(v, nl=0.5, nh=2.):
     return 1 + 1 / (v**nl + v**nh)

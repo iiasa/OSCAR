@@ -1,0 +1,105 @@
+# Constraint specifications from RCMIP phase 3 + additional constraints
+# References included for each constraint
+
+constraints:
+  - var: "D_Tg"
+    # GMST anomaly (from RCMIP3 / IGCC2024)
+    # (Romero-Prieto et al., 2025; https://doi.org/10.5194/egusphere-2025-5775) (Table 3)
+    base: [1850, 1900]
+    period: [2014, 2023]
+    median: 1.19
+    p5: 1.0
+    p95: 1.4
+    units: "K"
+
+  - var: "D_OHC"
+    # Ocean Heat Content (from RCMIP3 / IGCC2024)
+    # (Romero-Prieto et al., 2025; https://doi.org/10.5194/egusphere-2025-5775) (Table 3)
+    base: [1971, 1971]
+    period: [2020, 2020]
+    median: 435.1
+    p5: 315.8
+    p95: 560.5
+    units: "ZJ"
+
+  - var: "D_Focean"
+    # Carbon Flux to Oceans (from RCMIP3 / corrected GCB2024)
+    # (Romero-Prieto et al., 2025; https://zenodo.org/records/20720521) (v2.0.0)
+    # (Friedlingstein et al., 2026; https://doi.org/10.1038/s41586-025-09802-5) (Table 1)
+    period: [2014, 2023]
+    mean: 3.1
+    std: 0.5
+    units: "PgC yr-1"
+
+  - var: "D_Fland_pf"
+    # Carbon Flux to Land (from RCMIP3 / corrected GCB2024)
+    # (Romero-Prieto et al., 2025; https://zenodo.org/records/20720521) (v2.0.0)
+    # (Friedlingstein et al., 2026; https://doi.org/10.1038/s41586-025-09802-5) (Table 1)
+    # note: excludes Eluc but includes permafrost
+    period: [2014, 2023]
+    mean: 2.7
+    std: 0.9
+    units: "PgC yr-1"
+
+  - var: "D_Eluc"
+    # Land use change emissions (from corrected GCB2024)
+    # (Friedlingstein et al., 2026; https://doi.org/10.1038/s41586-025-09802-5) (Table 1)
+    period: [2014, 2023]
+    mean: 1.2
+    std: 0.7
+    units: "PgC yr-1"
+
+  - var: "ERF_aer"
+    # Aerosol ERF (from RCMIP3 / AR6)
+    # (Romero-Prieto et al., 2025; https://doi.org/10.5194/egusphere-2025-5775) (Table 3)
+    period: [2005, 2014]
+    median: -1.3
+    p5: -2.0
+    p95: -0.6
+    units: "W m-2"
+
+  - var: "Ewet"
+    # Wetlands emissions (from Global Methane Budget)
+    # (Saunois et al., 2025; https://doi.org/10.5194/essd-17-1873-2025) (Table 1)
+    # std = 0.5 * (214 - 119) / Cst.s1_to_p95.values
+    distrib: "lognormal"
+    period: [2010, 2019]
+    mean: "0.5*(159+165)" # average BU and TD
+    std: 24. # rounded, min-max assumed 95%
+    units: "TgCH4 yr-1"
+
+  - var: "Efire"
+    # Biomass burning emissions (from GFED4)
+    # (van der Werf et al., 2017; https://doi.org/10.5194/essd-9-697-2017)
+    # mean = load_data('biomass-burning_GFED4.').Ebb_C.sum(['reg_code', 'sect']).sel(year=slice(2014, 2023)).mean('year')
+    distrib: "lognormal"
+    period: [2014, 2023]
+    mean: 2.0 # rounded
+    std: 0.3 # arbitrary 15%
+    units: "PgC yr-1"
+
+  - var: "Eimb_CO2"
+    # CO2 budget imbalance (roughly zero by construction)
+    # (Friedlingstein et al., 2026; https://doi.org/10.1038/s41586-025-09802-5) (Table 1)
+    period: [2014, 2023]
+    mean: 0.0
+    std: 1.3 # BIM uncertainty
+    units: "PgC yr-1"
+
+  - var: "Eimb_CH4"
+    # CH4 budget imbalance
+    # note: includes changes in other natural sources
+    period: [2014, 2023]
+    mean: 0.0
+    std: "0.10 * 250" # ~10% of anthropogenic sources
+    units: "TgC yr-1"
+    skip: True
+
+  - var: "Eimb_N2O"
+    # CH4 budget imbalance
+    # note: includes changes in other natural sources
+    period: [2014, 2023]
+    mean: 0.0
+    std: "0.10 * 5" # ~10% of anthropogenic emissions
+    units: "TgN yr-1"
+    skip: True

@@ -1,9 +1,8 @@
-import importlib
 import numpy as np
 import xarray as xr
 
 from oscar._core._base.cls_main import Model
-from oscar._core._base.fct_solve import safe_exp, safe_ratio
+from oscar._core._base.fct_solve import safe_exp, f_max, safe_ratio
 
 
 ##################################################
@@ -14,6 +13,8 @@ from oscar._core._base.fct_solve import safe_exp, safe_ratio
 from oscar._core._model.OSCAR import OSCAR
 OSCAR_bgc = OSCAR.copy(new_name='OSCAR_bgc')
 
+
+## BGC PROCESSES
 
 ## partial pressure of CO2 at sea surface
 OSCAR_bgc.process(
@@ -34,72 +35,73 @@ def Eq__D_pCO2(Var, Par):
 
 ## net primary productivity factor
 OSCAR_bgc.process(
-    Out = 'f_npp', 
+    Out = 'r_npp', 
     In = ('D_CO2',), 
-    Eq = lambda Var, Par: Eq__f_npp(Var, Par), 
+    Eq = lambda Var, Par: Eq__r_npp(Var, Par), 
     units = '1')
 
-def Eq__f_npp(Var, Par):
-    f_CO2 = (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
-    return f_CO2
+def Eq__r_npp(Var, Par):
+    fct_CO2 = (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
+    return safe_ratio(fct_CO2)
 
 
 ## wildfire factor
 OSCAR_bgc.process(
-    Out = 'f_fire', 
-    In = ('D_npp',), 
-    Eq = lambda Var, Par: Eq__f_fire(Var, Par), 
+    Out = 'r_vfire', 
+    In = ('r_npp',), 
+    Eq = lambda Var, Par: Eq__r_vfire(Var, Par), 
     units = '1')
 
-def Eq__f_fire(Var, Par):
-    f_CO2 = safe_exp(Par.x_fire_npp * np.log(safe_ratio(1 + Var.D_npp / Par.npp_pi)), 1/Par.v_fire ** 0.5)
-    return f_CO2
+def Eq__r_vfire(Var, Par):
+    fct_npp = safe_exp(Par.x_fire_npp * np.log(Var.r_npp), f_max(Par.v_fire))
+    fct_npp2 = safe_exp(Par.x_fire_npp2 * np.log(Var.r_npp)**2, f_max(Par.v_fire))
+    return fct_npp * fct_npp2
 
 
 ## total mortality factor
 OSCAR_bgc.process(
-    Out = 'f_mort', 
-    In = ('D_npp',), 
-    Eq = lambda Var, Par: Eq__f_mort(Var, Par), 
+    Out = 'r_vmort', 
+    In = ('r_npp',), 
+    Eq = lambda Var, Par: Eq__r_vmort(Var, Par), 
     units = '1')
 
-def Eq__f_mort(Var, Par):
-    f_CO2 = safe_exp(Par.x_mort_npp * np.log(safe_ratio(1 + Var.D_npp / Par.npp_pi)), 1/Par.v_mort ** 0.5)
-    return f_CO2
+def Eq__r_vmort(Var, Par):
+    fct_npp = safe_exp(Par.x_mort_npp * np.log(Var.r_npp), f_max(Par.v_mort))
+    return fct_npp
 
 
 ## coarse woody debris decay factor
 OSCAR_bgc.process(
-    Out = 'f_cwd', 
+    Out = 'r_vcwd', 
     In = (), 
-    Eq = lambda Var, Par: Eq__f_cwd(Var, Par), 
+    Eq = lambda Var, Par: Eq__r_vcwd(Var, Par), 
     units = '1')
 
-def Eq__f_cwd(Var, Par):
-    return 1
+def Eq__r_vcwd(Var, Par):
+    return 1.
 
 
 ## soil respiration factor
 OSCAR_bgc.process(
-    Out = 'f_resp', 
+    Out = 'r_vesp', 
     In = ('D_ffall',), 
-    Eq = lambda Var, Par: Eq__f_resp(Var, Par), 
+    Eq = lambda Var, Par: Eq__r_vesp(Var, Par), 
     units = '1')
 
-def Eq__f_resp(Var, Par):
-    f_CO2 = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + Var.D_ffall / Par.ffall_pi)), 1/Par.v_resp ** 0.5)
-    return f_CO2
+def Eq__r_vesp(Var, Par):
+    fct_in = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + Var.D_ffall / Par.ffall_pi)),  f_max(Par.v_resp))
+    return fct_in
 
 
 ## heterotrophic respiration factor for permafrost
 OSCAR_bgc.process(
-    Out = 'f_ethaw', 
+    Out = 'r_ethaw', 
     In = (), 
     Eq = lambda Var, Par: Eq__f_ethaw(Var, Par), 
     units = '1')
 
 def Eq__f_ethaw(Var, Par):
-    return 1
+    return 1.
 
 
 ## theoretical thawed fraction
@@ -121,8 +123,8 @@ OSCAR_bgc.process(
     units = 'TgC Mha-1 yr-1')
 
 def Eq__D_ewet(Var, Par):
-    f_CO2 = 1 + Par.b_ewet_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi)
-    return Par.ewet_pi * (f_CO2 - 1)
+    fct_CO2 = 1 + Par.b_ewet_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi)
+    return Par.ewet_pi * (safe_ratio(fct_CO2) - 1)
     
 
 ## wetland extent
@@ -134,5 +136,5 @@ OSCAR_bgc.process(
 
 def Eq__D_Awet(Var, Par):
     f_CO2 = (1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_Awet_CO2
-    return Par.Awet_pi * (f_CO2 - 1)
+    return Par.Awet_pi * (safe_ratio(f_CO2) - 1)
 

@@ -3,6 +3,7 @@ OSCAR - Standard Workflow
 Description: Fast verification using bootstrap starter-kit.
 """
 import xarray as xr
+from dev.devtools.make_run_mode.tier0_standard.make_bootstrap_from_default import generate_bootstrap
 from oscar._core._model.OSCAR import OSCAR
 from oscar._io.paths import INTERNAL_BOOTSTRAP_DIR, get_paths, PACKAGE_ROOT
 from oscar._utils.load_config import load_config
@@ -48,10 +49,9 @@ def run_standard(show_plot=True, run_model=True, **kwargs):
         
         # Select variables defined in the standard_mode
         vars_to_save = _flatten_list(cfg['var_select'])
-        Out_scen_sel = Out_scen[vars_to_save]
-        
+
         # Ensure historical results match the variable selection
-        Out_all = xr.concat([Out_hist[vars_to_save], Out_scen_sel], dim='year')
+        Out_all = xr.concat([Out_hist[vars_to_save], Out_scen[vars_to_save]], dim='year', join='outer')
 
         # 4. Apply Metadata Registration
         print("Applying scientific metadata...")
@@ -66,17 +66,15 @@ def run_standard(show_plot=True, run_model=True, **kwargs):
         if not out_file.exists():
             raise FileNotFoundError(f"No results found. Run with run_model=True first.")
         Out_all = xr.open_dataset(out_file).load()
+        print(f"Loaded existing results from {out_file}")
 
     # 6. Generate Summary Plots
-    plot_timeseries_summary(
-        ds=Out_all, 
-        split_year=hist_end_year, 
-        var_list=_flatten_list(cfg['var_select']), 
-        out_dir=out_dir, 
-        show_plot=show_plot
-    )
+    plot_timeseries_summary(ds=Out_all, split_year=hist_end_year, var_list=[v for v in _flatten_list(cfg['var_select']) if v != 'D_Tg'],
+                             out_dir=out_dir, show_plot=False)
+    plot_timeseries_summary(ds=Out_all, split_year=hist_end_year, var_list=['D_Tg'],
+                            out_dir=out_dir, show_plot=show_plot)
     
-    return Out_all
+    return Out_all, f'results saved to: {out_dir}'
 
 def _flatten_list(nested):
     """Helper to handle YAML anchor nesting."""
@@ -87,3 +85,10 @@ def _flatten_list(nested):
         else:
             flat.add(item)
     return flat
+
+if __name__ == "__main__":
+    print("Running OSCAR Standard Workflow...")
+    Out_all, msg = run_standard()
+    print(Out_all)
+    print(msg)
+    

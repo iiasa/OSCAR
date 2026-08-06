@@ -58,26 +58,26 @@ def Eq__p_slash(Par):
 
 ## factor for mortality rate assuming regrowth dominated by woody biomass
 OSCAR_landC_bk.process(
-    Out = 'f_mort_regr', 
-    Eq = lambda Par: Eq__f_mort_regr(Par), 
+    Out = 'a_mort_regr', 
+    Eq = lambda Par: Eq__a_mort_regr(Par), 
     units='1')
 
-def Eq__f_mort_regr(Par):
+def Eq__a_mort_regr(Par):
     if 'p2_npp_wood' not in Par: return None
-    return Par.p2_npp_wood.where(Par.p2_npp_wood != 0, 1.)
+    return Par.p2_npp_wood.where(Par.p2_npp_wood != 0, 1.) * Par.p_wood + 1. * (1 - Par.p_wood)
 
 
 ## fraction of biomass growth reached under shifting cultivation
 OSCAR_landC_bk.process(
-    Out = 'f_cveg_shift', 
-    Eq = lambda Par: Eq__f_cveg_shift(Par), 
+    Out = 'p_cveg_shift', 
+    Eq = lambda Par: Eq__p_cveg_shift(Par), 
     units='1')
 
-def Eq__f_cveg_shift(Par):
+def Eq__p_cveg_shift(Par):
     if 'v_mort' not in Par: return None
     if 'v_fire' not in Par: return None
-    if 'f_mort_regr' not in Par: return None
-    return 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * Par.t_shift)
+    if 'a_mort_regr' not in Par: return None
+    return 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.t_shift)
 
 
 ## PREINDUSTRIAL STEADY-STATE
@@ -92,17 +92,17 @@ def Eq__Cveg_bk_pi(Par):
     if 'v_mort' not in Par: return None
     if 'v_fire' not in Par: return None
     if 'cveg_pi' not in Par: return None
-    if 'f_mort_regr' not in Par: return None
-    if 'f_cveg_shift' not in Par: return None
+    if 'a_mort_regr' not in Par: return None
+    if 'p_cveg_shift' not in Par: return None
     ## age effect
-    f_cveg_age = 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
     ## wood harvest
-    dCveg_bk_pi_wharv = -Par.cveg_pi * f_cveg_age * Par.dA_wharv_pi
+    dCveg_bk_pi_wharv = -Par.cveg_pi * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
-    dCveg_bk_pi_shift = -Par.cveg_pi * Par.f_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    dCveg_bk_pi_shift = -Par.cveg_pi * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCveg_bk_pi = dCveg_bk_pi_wharv + dCveg_bk_pi_shift
-    return (dCveg_bk_pi / (Par.f_mort_regr * Par.v_mort + Par.v_fire)).where((Par.f_mort_regr * Par.v_mort + Par.v_fire) != 0, 0.)
+    return (dCveg_bk_pi / (Par.a_mort_regr * Par.v_mort + Par.v_fire)).where((Par.a_mort_regr * Par.v_mort + Par.v_fire) != 0, 0.)
 
 
 ## preindustrial bookkeeping imbalance of coarse woody debris pool
@@ -118,14 +118,14 @@ def Eq__Ccwd_bk_pi(Par):
     if 'v_cwd' not in Par: return None
     if 'p_slash' not in Par: return None
     if 'age_bk_pi' not in Par: return None
-    if 'f_cveg_shift' not in Par: return None
+    if 'p_cveg_shift' not in Par: return None
     if 'Cveg_bk_pi' not in Par: return None
     ## age effect
-    f_cveg_age = 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
     ## wood harvest
-    dCcwd_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_slash * f_cveg_age * Par.dA_wharv_pi
+    dCcwd_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_slash * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
-    dCcwd_bk_pi_shift = Par.cveg_pi * Par.p_wood * Par.p_slash * Par.f_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    dCcwd_bk_pi_shift = Par.cveg_pi * Par.p_wood * Par.p_slash * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCcwd_bk_pi = dCcwd_bk_pi_wharv + dCcwd_bk_pi_shift
     return ((Par.p2_npp_wood * Par.v_mort * Par.Cveg_bk_pi + dCcwd_bk_pi) / Par.v_cwd).where(Par.v_cwd != 0, 0.)
@@ -144,15 +144,15 @@ def Eq__Csoil_bk_pi(Par):
     if 'v_cwd' not in Par: return None
     if 'v_resp' not in Par: return None
     if 'p_soft' not in Par: return None
-    if 'f_cveg_shift' not in Par: return None
+    if 'p_cveg_shift' not in Par: return None
     if 'Cveg_bk_pi' not in Par: return None
     if 'Ccwd_bk_pi' not in Par: return None
     ## age effect
-    f_cveg_age = 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
     ## wood harvest
-    dCsoil_bk_pi_wharv = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * f_cveg_age * Par.dA_wharv_pi
+    dCsoil_bk_pi_wharv = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
-    dCsoil_bk_pi_shift = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * Par.f_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    dCsoil_bk_pi_shift = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCsoil_bk_pi = dCsoil_bk_pi_wharv + dCsoil_bk_pi_shift
     return (((1 - Par.p2_npp_wood) * Par.v_mort * Par.Cveg_bk_pi + (1 - Par.p_cwd_resp) * Par.v_cwd * Par.Ccwd_bk_pi + dCsoil_bk_pi) / Par.v_resp).where(Par.v_resp != 0, 0.)
@@ -168,13 +168,13 @@ def Eq__Chwp_bk_pi(Par):
     if 'cveg_pi' not in Par: return None
     if 'p_hwp' not in Par: return None
     if 'age_bk_pi' not in Par: return None
-    if 'f_cveg_shift' not in Par: return None
+    if 'p_cveg_shift' not in Par: return None
     ## age effect
-    f_cveg_age = 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
     ## wood harvest
-    dChwp_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_hwp * f_cveg_age * Par.dA_wharv_pi
+    dChwp_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_hwp * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
-    dChwp_bk_pi_shift = Par.cveg_pi * Par.p_wood * Par.p_hwp * Par.f_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    dChwp_bk_pi_shift = Par.cveg_pi * Par.p_wood * Par.p_hwp * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dChwp_bk_pi = dChwp_bk_pi_wharv + dChwp_bk_pi_shift
     return (dChwp_bk_pi / Par.v_hwp).where(Par.v_hwp != 0, 0.)
@@ -188,31 +188,31 @@ def Eq__Chwp_bk_pi(Par):
 
 ## fraction of biomass growth reached for secondary land
 OSCAR_landC_bk.process(
-    Out = 'f_cveg_age', 
+    Out = 'p_cveg_age', 
     In = ('D_age_bk',), 
-    Eq = lambda Var, Par: Eq__f_cveg_age(Var, Par), 
+    Eq = lambda Var, Par: Eq__p_cveg_age(Var, Par), 
     units='1')
 
-def Eq__f_cveg_age(Var, Par):
-    return 1 - np.exp(-(Par.f_mort_regr * Par.v_mort + Par.v_fire) * (Par.age_bk_pi + Var.D_age_bk))
+def Eq__p_cveg_age(Var, Par):
+    return 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * (Par.age_bk_pi + Var.D_age_bk))
 
 
 ## bookkeeping initialization of vegetation
 OSCAR_landC_bk.process(
     Out = 'D_Fbk_veg2veg', 
-    In = ('D_cveg', 'f_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
+    In = ('D_cveg', 'p_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
     Eq = lambda Var, Par: Eq__D_Fbk_veg2veg(Var, Par), 
     units='PgC yr-1')
 
 def Eq__D_Fbk_veg2veg(Var, Par):
     ## land cover change
     D_Fbk_lcc1 = (-(Par.cveg_pi + Var.D_cveg).rename({'bio_land':'bio_to'}) * Var.D_dA_lcc1).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    D_Fbk_lcc2 = (-((Par.cveg_pi + Var.D_cveg) * Var.f_cveg_age).rename({'bio_land':'bio_to'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_lcc2 = (-((Par.cveg_pi + Var.D_cveg) * Var.p_cveg_age).rename({'bio_land':'bio_to'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## wood harvest
     D_Fbk_wharv1 = (-(Par.cveg_pi + Var.D_cveg)) * Var.D_dA_wharv1
-    D_Fbk_wharv2 = (-(Par.cveg_pi + Var.D_cveg) * Var.f_cveg_age) * Var.D_dA_wharv2
+    D_Fbk_wharv2 = (-(Par.cveg_pi + Var.D_cveg) * Var.p_cveg_age) * Var.D_dA_wharv2
     ## shifting cultivation
-    D_Fbk_shift = (-((Par.cveg_pi + Var.D_cveg) * Par.f_cveg_shift).rename({'bio_land':'bio_to'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_shift = (-((Par.cveg_pi + Var.D_cveg) * Par.p_cveg_shift).rename({'bio_land':'bio_to'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     return D_Fbk_lcc1 + D_Fbk_lcc2 + D_Fbk_wharv1 + D_Fbk_wharv2 + D_Fbk_shift
 
@@ -250,19 +250,19 @@ def Eq__D_Fbk_soil2soil(Var, Par):
 ## bookkeeping transfer from vegetation to coarse woody debris
 OSCAR_landC_bk.process(
     Out = 'D_Fbk_veg2cwd', 
-    In = ('D_cveg', 'f_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
+    In = ('D_cveg', 'p_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
     Eq = lambda Var, Par: Eq__D_Fbk_veg2cwd(Var, Par), 
     units='PgC yr-1')
 
 def Eq__D_Fbk_veg2cwd(Var, Par):
     ## land cover change
     D_Fbk_lcc1 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc1).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Var.f_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Var.p_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## wood harvest
     D_Fbk_wharv1 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash) * Var.D_dA_wharv1
-    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Var.f_cveg_age) * Var.D_dA_wharv2
+    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Var.p_cveg_age) * Var.D_dA_wharv2
     ## shifting cultivation
-    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Par.f_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_slash * Par.p_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     return D_Fbk_lcc1 + D_Fbk_lcc2 + D_Fbk_wharv1 + D_Fbk_wharv2 + D_Fbk_shift
 
@@ -270,19 +270,19 @@ def Eq__D_Fbk_veg2cwd(Var, Par):
 ## bookkeeping transfer from vegetation to litter
 OSCAR_landC_bk.process(
     Out = 'D_Fbk_veg2litter', 
-    In = ('D_cveg', 'f_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
+    In = ('D_cveg', 'p_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
     Eq = lambda Var, Par: Eq__D_Fbk_veg2litter(Var, Par), 
     units='PgC yr-1')
 
 def Eq__D_Fbk_veg2litter(Var, Par):
     ## land cover change
     D_Fbk_lcc1 = (((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft)).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc1).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Var.f_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Var.p_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## wood harvest
     D_Fbk_wharv1 = ((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft)) * Var.D_dA_wharv1
-    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Var.f_cveg_age) * Var.D_dA_wharv2
+    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Var.p_cveg_age) * Var.D_dA_wharv2
     ## shifting cultivation
-    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Par.f_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * (Par.p_leaf + Par.p_soft) * Par.p_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     return D_Fbk_lcc1 + D_Fbk_lcc2 + D_Fbk_wharv1 + D_Fbk_wharv2 + D_Fbk_shift
 
@@ -290,19 +290,19 @@ def Eq__D_Fbk_veg2litter(Var, Par):
 ## bookkeeping transfer from vegetation to soil
 OSCAR_landC_bk.process(
     Out = 'D_Fbk_veg2soil', 
-    In = ('D_cveg', 'f_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
+    In = ('D_cveg', 'p_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
     Eq = lambda Var, Par: Eq__D_Fbk_veg2soil(Var, Par), 
     units='PgC yr-1')
 
 def Eq__D_Fbk_veg2soil(Var, Par):
     ## land cover change
     D_Fbk_lcc1 = (((Par.cveg_pi + Var.D_cveg) * Par.p_root).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc1).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_root * Var.f_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_root * Var.p_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## wood harvest
     D_Fbk_wharv1 = ((Par.cveg_pi + Var.D_cveg) * Par.p_root) * Var.D_dA_wharv1
-    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_root * Var.f_cveg_age) * Var.D_dA_wharv2
+    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_root * Var.p_cveg_age) * Var.D_dA_wharv2
     ## shifting cultivation
-    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_root * Par.f_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_root * Par.p_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     return D_Fbk_lcc1 + D_Fbk_lcc2 + D_Fbk_wharv1 + D_Fbk_wharv2 + D_Fbk_shift
 
@@ -310,19 +310,19 @@ def Eq__D_Fbk_veg2soil(Var, Par):
 ## bookkeeping transfer from vegetation to harvested wood products
 OSCAR_landC_bk.process(
     Out = 'D_Fbk_veg2hwp', 
-    In = ('D_cveg', 'f_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
+    In = ('D_cveg', 'p_cveg_age', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'), 
     Eq = lambda Var, Par: Eq__D_Fbk_veg2hwp(Var, Par), 
     units='PgC yr-1')
 
 def Eq__D_Fbk_veg2hwp(Var, Par):
     ## land cover change
     D_Fbk_lcc1 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc1).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Var.f_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_lcc2 = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Var.p_cveg_age).rename({'bio_land':'bio_from'}) * Var.D_dA_lcc2).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## wood harvest
     D_Fbk_wharv1 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp) * Var.D_dA_wharv1
-    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Var.f_cveg_age) * Var.D_dA_wharv2
+    D_Fbk_wharv2 = ((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Var.p_cveg_age) * Var.D_dA_wharv2
     ## shifting cultivation
-    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Par.f_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    D_Fbk_shift = (((Par.cveg_pi + Var.D_cveg) * Par.p_wood * Par.p_hwp * Par.p_cveg_shift).rename({'bio_land':'bio_from'}) * Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     return D_Fbk_lcc1 + D_Fbk_lcc2 + D_Fbk_wharv1 + D_Fbk_wharv2 + D_Fbk_shift
 
@@ -376,24 +376,24 @@ def Eq__D_Egraz_bk(Var, Par):
 ## wildfire emissions (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Efire_bk', 
-    In = ('f_fire', 'D_Cveg_bk'), 
+    In = ('r_vfire', 'D_Cveg_bk'), 
     Eq = lambda Var, Par: Eq__D_Efire_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Efire_bk(Var, Par):
-    return Par.v_fire * Var.f_fire * Var.D_Cveg_bk
+    return Par.v_fire * Var.r_vfire * Var.D_Cveg_bk
 
 
 ## total mortality flux (under bookkeeping)
 ## note: assumes regrowth time dominated by woody biomass
 OSCAR_landC_bk.process(
     Out = 'D_Fmort_bk', 
-    In = ('f_mort', 'D_Cveg_bk'), 
+    In = ('r_vmort', 'D_Cveg_bk'), 
     Eq = lambda Var, Par: Eq__D_Fmort_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Fmort_bk(Var, Par):
-    return Par.f_mort_regr * Par.v_mort * Var.f_mort * Var.D_Cveg_bk
+    return Par.a_mort_regr * Par.v_mort * Var.r_vmort * Var.D_Cveg_bk
 
 
 ## litterfall flux (under bookkeeping)
@@ -410,12 +410,12 @@ def Eq__D_Ffall_bk(Var, Par):
 ## coarse woody debris decay flux (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Fcwd_bk', 
-    In = ('f_cwd', 'D_Ccwd_bk'), 
+    In = ('r_vcwd', 'D_Ccwd_bk'), 
     Eq = lambda Var, Par: Eq__D_Fcwd_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Fcwd_bk(Var, Par):
-    return Par.v_cwd * Var.f_cwd * Var.D_Ccwd_bk
+    return Par.v_cwd * Var.r_vcwd * Var.D_Ccwd_bk
 
 
 ## coarse woody debris emissions (under bookkeeping)
@@ -432,12 +432,12 @@ def Eq__D_Ecwd_bk(Var, Par):
 ## soil respiration (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Esoil_bk', 
-    In = ('f_resp', 'D_Csoil_bk'), 
+    In = ('r_vresp', 'D_Csoil_bk'), 
     Eq = lambda Var, Par: Eq__D_Esoil_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Esoil_bk(Var, Par):
-    return Par.v_resp * Var.f_resp * Var.D_Csoil_bk
+    return Par.v_resp * Var.r_vresp * Var.D_Csoil_bk
 
 
 ## harvested wood product decay
@@ -469,22 +469,18 @@ def Eq__D_NBP_bk(Var, Par):
 ## mean age in bookkeeping
 OSCAR_landC_bk.process(
     Out = 'D_age_bk', 
-    In = ('D_age_bk', 'D_Aland_bk', 'D_dA_lcc1', 'D_dA_lcc2', 'D_dA_wharv1', 'D_dA_wharv2', 'D_dA_shift'),
+    In = ('D_age_bk', 'D_Aland_bk', 'D_dA_lcc2', 'D_dA_wharv2'),
     DiffEq = lambda Var, Par: DiffEq__age_bk(Var, Par), 
     units = 'yr', 
     core_dims = ['reg_land', 'bio_land'])
 
 def DiffEq__age_bk(Var, Par):
     ## land cover change
-    d_Abk_lcc1 = Var.D_dA_lcc1.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
-    d_Abk_lcc2 = Var.D_dA_lcc2.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
+    d_Abk_lcc2 = Var.D_dA_lcc2.sum('bio_to', min_count=1).rename({'bio_from':'bio_land'})
     ## wood harvest
-    d_Abk_wharv1 = Var.D_dA_wharv1
     d_Abk_wharv2 = (Par.dA_wharv_pi + Var.D_dA_wharv2)
-    ## shifting cultivation
-    #d_Abk_shift = (Par.dA_shift_pi + Var.D_dA_shift).sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
-    return 1 - (Par.age_bk_pi + Var.D_age_bk) * (d_Abk_lcc1 + d_Abk_lcc2 + d_Abk_wharv1 + d_Abk_wharv2) / (Par.Aland_bk_pi + Var.D_Aland_bk)
+    return 1 - (Par.age_bk_pi + Var.D_age_bk) * (d_Abk_lcc2 + d_Abk_wharv2) / (Par.Aland_bk_pi + Var.D_Aland_bk)
 
 
 ## land area under bookkeeping

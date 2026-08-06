@@ -23,16 +23,15 @@ OSCAR_landC_density = Model('OSCAR_landC_density')
 ## SHIFTED PREINDUSTRIAL STATE
 
 ## adjusted preindustrial net primary productivity
+## note: assumes climate was same between PI and precalibration period
 OSCAR_landC_density.process(
     Out = 'npp_pi', 
     Eq = lambda Par: Eq__npp_pi(Par), 
     units = 'PgC Mha-1 yr-1')
 
 def Eq__npp_pi(Par):
-    f_CO2 = 1 + Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1)
-    f_Tl = np.exp(Par.g_npp_T2 * 2 * Par.D_Topt_npp * (Par.Tl_pi - Par.Tl_piL)) * np.exp(-Par.g_npp_T2 * (Par.Tl_pi - Par.Tl_piL)**2)
-    f_Pl = np.exp(Par.x_npp_P * np.log(safe_ratio(Par.Pl_pi / Par.Pl_piL)))
-    return Par.k_npp * Par.npp_piL * f_CO2 * f_Tl * f_Pl
+    fct_CO2= 1 + Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1)
+    return Par.k_npp * Par.npp_piL * fct_CO2
 
 
 ## adjusted CO2 fertilisation parameter
@@ -43,55 +42,6 @@ OSCAR_landC_density.process(
 
 def Eq__b2_npp_CO2(Par):
     return Par.b_npp_CO2 * (Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 / (1 +  Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1))
-
-
-## adjusted optimal temperature parameter
-OSCAR_landC_density.process(
-    Out = 'D_Topt2_npp', 
-    Eq = lambda Par: Eq__D_Topt2_npp(Par), 
-    units = 'K')
-
-def Eq__D_Topt2_npp(Par):
-    return Par.D_Topt_npp + Par.Tl_piL - Par.Tl_pi
-
-
-## adjusted wildfire rate
-OSCAR_landC_density.process(
-    Out = 'v_fire', 
-    Eq = lambda Par: Eq__v_fire(Par), 
-    units = 'yr-1')
-
-def Eq__v_fire(Par):
-    f_npp = 1.
-    f_Tl = np.exp(Par.g_fire_T * (Par.Tl_pi - Par.Tl_piL))
-    f_Pl = np.exp(Par.g_fire_P * (Par.Pl_pi - Par.Pl_piL))
-    return Par.v_fire_piL * f_npp * f_Tl * f_Pl
-
-
-## adjusted mortality rate
-OSCAR_landC_density.process(
-    Out = 'v_mort', 
-    Eq = lambda Par: Eq__v_mort(Par), 
-    units = 'yr-1')
-
-def Eq__v_mort(Par):
-    f_npp = 1.
-    f_Tl = np.exp(Par.g_mort_T * (Par.Tl_pi - Par.Tl_piL))
-    f_Pl = np.exp(Par.x_mort_P * np.log(safe_ratio(Par.Pl_pi / Par.Pl_piL)))
-    return Par.v_mort_piL * f_npp * f_Tl * f_Pl
-
-
-## adjusted respiration rate
-OSCAR_landC_density.process(
-    Out = 'v_resp', 
-    Eq = lambda Par: Eq__v_resp(Par), 
-    units = 'yr-1')
-
-def Eq__v_resp(Par):
-    f_in = 1.
-    f_Tl = np.exp(Par.g_resp_T * (Par.Tl_pi - Par.Tl_piL))
-    f_Pl = np.exp(Par.x_resp_P * np.log(safe_ratio(Par.Pl_pi / Par.Pl_piL)))
-    return Par.v_resp_piL * f_in * f_Tl * f_Pl
 
 
 ## COARSE WOODY DEBRIS
@@ -191,29 +141,29 @@ def Eq__csoil_pi(Par):
 ## Diagnostic variables
 ##=====================
 
-## net primary productivity factor
+## relative change net primary productivity
 OSCAR_landC_density.process(
-    Out = 'f_npp', 
-    In = ('D_CO2', 'D_Tl', 'D_Pl'), 
-    Eq = lambda Var, Par: Eq__f_npp(Var, Par), 
+    Out = 'r_npp', 
+    In = ('D_CO2', 'D_Tl', 'r_Pl'), 
+    Eq = lambda Var, Par: Eq__r_npp(Var, Par), 
     units = '1')
 
-def Eq__f_npp(Var, Par):
-    f_CO2 = (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
-    f_Tl = safe_exp(Par.g_npp_T2 * 2 * Par.D_Topt2_npp * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * Var.D_Tl**2)
-    f_Pl = safe_exp(Par.x_npp_P * np.log(safe_ratio(1 + Var.D_Pl / Par.Pl_pi)), 100)
-    return f_CO2 * f_Tl * f_Pl
+def Eq__r_npp(Var, Par):
+    fct_CO2= (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
+    fct_Tl = safe_exp(Par.g_npp_T2 * 2 * Par.D_Topt_npp * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * Var.D_Tl**2)
+    fct_Pl = safe_exp(Par.x_npp_P * np.log(Var.r_Pl), 100)
+    return safe_ratio(fct_CO2* fct_Tl * fct_Pl)
 
 
 ## net primary productivity (areal)
 OSCAR_landC_density.process(
     Out = 'D_npp', 
-    In = ('f_npp',), 
+    In = ('r_npp',), 
     Eq = lambda Var, Par: Eq__D_npp(Var, Par), 
     units = 'PgC Mha-1 yr-1')
 
 def Eq__D_npp(Var, Par):
-    return Par.npp_pi * (Var.f_npp - 1)
+    return Par.npp_pi * (Var.r_npp - 1)
 
 
 ## crop harvesting (areal)
@@ -238,55 +188,55 @@ def Eq__D_egraz(Var, Par):
     return Par.p_graz * Var.D_npp
 
 
-## wildfire factor
+## relative change in wildfire rate
 OSCAR_landC_density.process(
-    Out = 'f_fire', 
-    In = ('D_npp', 'D_Tl', 'D_Pl'), 
-    Eq = lambda Var, Par: Eq__f_fire(Var, Par), 
+    Out = 'r_vfire', 
+    In = ('r_npp', 'D_Tl', 'r_Pl'), 
+    Eq = lambda Var, Par: Eq__r_vfire(Var, Par), 
     units = '1')
 
-def Eq__f_fire(Var, Par):
-    f_npp = safe_exp(Par.x_fire_npp * np.log(safe_ratio(1 + Var.D_npp / Par.npp_pi)), f_max(Par.v_fire))
-    f_npp2 = safe_exp(Par.x_fire_npp2 * np.log(safe_ratio(1 + Var.D_npp / Par.npp_pi))**2, f_max(Par.v_fire))
-    f_Tl = safe_exp(Par.g_fire_T * Var.D_Tl, f_max(Par.v_fire))
-    f_Pl = safe_exp(Par.g_fire_P * Var.D_Pl, f_max(Par.v_fire))
-    return f_npp * f_npp2 * f_Tl * f_Pl
+def Eq__r_vfire(Var, Par):
+    fct_npp = safe_exp(Par.x_fire_npp * np.log(Var.r_npp), f_max(Par.v_fire))
+    fct_npp2 = safe_exp(Par.x_fire_npp2 * np.log(Var.r_npp)**2, f_max(Par.v_fire))
+    fct_Tl = safe_exp(Par.g_fire_T * Var.D_Tl, f_max(Par.v_fire))
+    fct_Pl = safe_exp(Par.g_fire_P * Par.Pl_pi * (Var.r_Pl - 1), f_max(Par.v_fire))
+    return fct_npp * fct_npp2 * fct_Tl * fct_Pl
 
 
 ## wildfire emissions (areal)
 OSCAR_landC_density.process(
     Out = 'D_efire', 
-    In = ('f_fire', 'D_cveg'), 
+    In = ('r_vfire', 'D_cveg'), 
     Eq = lambda Var, Par: Eq__D_efire(Var, Par), 
     units = 'PgC Mha-1 yr-1')
 
 def Eq__D_efire(Var, Par):
-    return Par.v_fire * ((Par.cveg_pi + Var.D_cveg) * Var.f_fire - Par.cveg_pi)
+    return Par.v_fire * ((Par.cveg_pi + Var.D_cveg) * Var.r_vfire - Par.cveg_pi)
 
 
-## total mortality factor
+## relative change in total mortality rate
 OSCAR_landC_density.process(
-    Out = 'f_mort', 
-    In = ('D_npp', 'D_Tl', 'D_Pl'), 
-    Eq = lambda Var, Par: Eq__f_mort(Var, Par), 
+    Out = 'r_vmort', 
+    In = ('r_npp', 'D_Tl', 'r_Pl'), 
+    Eq = lambda Var, Par: Eq__r_vmort(Var, Par), 
     units = '1')
 
-def Eq__f_mort(Var, Par):
-    f_npp = safe_exp(Par.x_mort_npp * np.log(safe_ratio(1 + Var.D_npp / Par.npp_pi)), f_max(Par.v_mort))
-    f_Tl = safe_exp(Par.g_mort_T * Var.D_Tl,  f_max(Par.v_mort))
-    f_Pl = safe_exp(Par.x_mort_P * np.log(safe_ratio(1 + Var.D_Pl / Par.Pl_piL)), f_max(Par.v_mort))
-    return f_npp * f_Tl * f_Pl
+def Eq__r_vmort(Var, Par):
+    fct_npp = safe_exp(Par.x_mort_npp * np.log(Var.r_npp), f_max(Par.v_mort))
+    fct_Tl = safe_exp(Par.g_mort_T * Var.D_Tl,  f_max(Par.v_mort))
+    fct_Pl = safe_exp(Par.x_mort_P * np.log(Var.r_Pl), f_max(Par.v_mort))
+    return fct_npp * fct_Tl * fct_Pl
 
 
 ## total mortality flux (areal)
 OSCAR_landC_density.process(
     Out = 'D_fmort', 
-    In = ('f_mort', 'D_cveg'), 
+    In = ('r_vmort', 'D_cveg'), 
     Eq = lambda Var, Par: Eq__D_fmort(Var, Par), 
     units='PgC Mha-1 yr-1')
 
 def Eq__D_fmort(Var, Par):
-    return Par.v_mort * ((Par.cveg_pi + Var.D_cveg) * Var.f_mort - Par.cveg_pi)
+    return Par.v_mort * ((Par.cveg_pi + Var.D_cveg) * Var.r_vmort - Par.cveg_pi)
 
 
 ## litterfall flux (areal)
@@ -301,26 +251,26 @@ def Eq__D_ffall(Var, Par):
     return (1 - Par.p2_npp_wood) * Var.D_fmort
 
 
-## coarse woody debris decay factor
+## relative change in coarse woody debris decay rate
 OSCAR_landC_density.process(
-    Out = 'f_cwd', 
+    Out = 'r_vcwd', 
     In = ('D_Tl',), 
-    Eq = lambda Var, Par: Eq__f_cwd(Var, Par), 
+    Eq = lambda Var, Par: Eq__r_vcwd(Var, Par), 
     units = '1')
 
-def Eq__f_cwd(Var, Par):
+def Eq__r_vcwd(Var, Par):
     return safe_exp(Par.g_cwd_T * Var.D_Tl,  f_max(Par.v_cwd))
 
 
 ## coarse woody debris decay flux (areal)
 OSCAR_landC_density.process(
     Out = 'D_fcwd', 
-    In = ('f_cwd', 'D_ccwd',), 
+    In = ('r_vcwd', 'D_ccwd',), 
     Eq = lambda Var, Par: Eq__D_fcwd(Var, Par), 
     units='PgC Mha-1 yr-1')
 
 def Eq__D_fcwd(Var, Par):
-    return Par.v_cwd * ((Par.ccwd_pi + Var.D_ccwd) * Var.f_cwd - Par.ccwd_pi)
+    return Par.v_cwd * ((Par.ccwd_pi + Var.D_ccwd) * Var.r_vcwd - Par.ccwd_pi)
 
 
 ## coarse woody debris emissions (areal)
@@ -334,29 +284,29 @@ def Eq__D_ecwd(Var, Par):
     return Par.p_cwd_resp * Var.D_fcwd
 
 
-## soil respiration factor
+## relative change in soil respiration rate
 OSCAR_landC_density.process(
-    Out = 'f_resp', 
-    In = ('D_ffall', 'D_Tl', 'D_Pl'), 
-    Eq = lambda Var, Par: Eq__f_resp(Var, Par), 
+    Out = 'r_vresp', 
+    In = ('D_ffall', 'D_Tl', 'r_Pl'), 
+    Eq = lambda Var, Par: Eq__r_vresp(Var, Par), 
     units = '1')
 
-def Eq__f_resp(Var, Par):
-    f_in = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + Var.D_ffall / Par.ffall_pi)),  f_max(Par.v_resp))
-    f_Tl = safe_exp(Par.g_resp_T * Var.D_Tl,  f_max(Par.v_resp))
-    f_Pl = safe_exp(Par.x_resp_P * np.log(safe_ratio(1 + Var.D_Pl / Par.Pl_piL)),  f_max(Par.v_resp))
-    return f_in * f_Tl * f_Pl
+def Eq__r_vresp(Var, Par):
+    fct_in = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + Var.D_ffall / Par.ffall_pi)),  f_max(Par.v_resp))
+    fct_Tl = safe_exp(Par.g_resp_T * Var.D_Tl,  f_max(Par.v_resp))
+    fct_Pl = safe_exp(Par.x_resp_P * np.log(Var.r_Pl),  f_max(Par.v_resp))
+    return fct_in * fct_Tl * fct_Pl
 
 
 ## soil respiration (areal)
 OSCAR_landC_density.process(
     Out = 'D_esoil', 
-    In = ('f_resp', 'D_csoil'), 
+    In = ('r_vresp', 'D_csoil'), 
     Eq = lambda Var, Par: Eq__D_esoil(Var, Par), 
     units='PgC Mha-1 yr-1')
 
 def Eq__D_esoil(Var, Par):
-    return Par.v_resp * ((Par.csoil_pi + Var.D_csoil) * Var.f_resp - Par.csoil_pi)
+    return Par.v_resp * ((Par.csoil_pi + Var.D_csoil) * Var.r_vresp - Par.csoil_pi)
 
 
 ## net biome productivity (areal)

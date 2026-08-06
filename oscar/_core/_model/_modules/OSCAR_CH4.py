@@ -24,8 +24,8 @@ OSCAR_CH4.process(
     units = 'yr-1')
 
 def Eq__v_CH4_OH(Par):
-    if 'f_kOH_pd' not in Par: return None
-    return Par.v_CH4_OH_pd / Par.f_kOH_pd
+    if 'r_kOH_pd' not in Par: return None
+    return Par.v_CH4_OH_pd / Par.r_kOH_pd
 
 
 ## preindustrial stratospheric sink rate
@@ -35,8 +35,8 @@ OSCAR_CH4.process(
     units = 'yr-1')
 
 def Eq__v_CH4_hv(Par):
-    if 'f_hv_pd' not in Par: return None
-    return Par.v_CH4_hv_pd / Par.f_hv_pd
+    if 'r_hv_pd' not in Par: return None
+    return Par.v_CH4_hv_pd / Par.r_hv_pd
 
 
 ## preindustrial CH4 lifetime
@@ -69,23 +69,23 @@ def Eq__Fsink_CH4_pi(Par):
 ## CH4 tropospheric hydroxyl sink
 OSCAR_CH4.process(
     Out = 'D_Foh_CH4', 
-    In = ('f_kOH', 'D_CH4'), 
+    In = ('r_kOH', 'D_CH4'), 
     Eq = lambda Var, Par: Eq__D_Foh_CH4(Var, Par), 
     units = 'TgC yr-1')
 
 def Eq__D_Foh_CH4(Var, Par):
-    return Par.a_CH4 * Par.v_CH4_OH * ((Par.CH4_pi + Var.D_CH4) * Var.f_kOH - Par.CH4_pi)
+    return Par.a_CH4 * Par.v_CH4_OH * ((Par.CH4_pi + Var.D_CH4) * Var.r_kOH - Par.CH4_pi)
 
 
 ## CH4 stratospheric sink
 OSCAR_CH4.process(
     Out = 'D_Fhv_CH4', 
-    In = ('f_hv', 'D_CH4'), 
+    In = ('r_hv', 'D_CH4'), 
     Eq = lambda Var, Par: Eq__D_Fhv_CH4(Var, Par), 
     units = 'TgC yr-1')
 
 def Eq__D_Fhv_CH4(Var, Par):
-    return Par.a_CH4 * Par.v_CH4_hv * ((Par.CH4_pi + Var.D_CH4) * Var.f_hv - Par.CH4_pi)
+    return Par.a_CH4 * Par.v_CH4_hv * ((Par.CH4_pi + Var.D_CH4) * Var.r_hv - Par.CH4_pi)
 
 
 ## CH4 tropospheric chlorine sink (in oceanic boundary layer)
@@ -143,6 +143,8 @@ OSCAR_CH4.process(
 def Eq__d_CH4(Var, Par):
     return 1 / Par.a_CH4 * (sum_reg(Var.D_Eant_CH4) + sum_reg(Var.D_Ebb_CH4) + Var.D_Ewet_CH4 + Var.D_Epf_CH4 - Var.D_Fsink_CH4 + Var.D_Emiss_CH4)
 
+
+## ADDITIONAL DIAGNOSTICS
 
 ## CH4 residual emissions (= budget imbalance)
 ## note: non-zero only if d_CH4 is prescribed!

@@ -18,8 +18,8 @@ name = 'drivers-params_IGCC'
 t_lag = get_params_strato().t_lag
 
 ## get OH and hv present-day periods
-years_OH = get_params_CH4().v_CH4_OH.years
-years_hv = get_params_N2O().v_N2O_hv.years
+years_OH = get_params_CH4().v_CH4_OH_pd.years
+years_hv = get_params_N2O().v_N2O_hv_pd.years
 
 
 ##################################################

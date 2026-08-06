@@ -36,7 +36,7 @@ def Eq__D_Eluc(Var, Par):
     return -Var.D_NBP_bk.sum('bio_land', min_count=1)
 
 
-## land carbon sink
+## land carbon sink (excluding permafrost)
 OSCAR_landC.process(
     Out = 'D_Fland', 
     In = ('D_nbp', 'D_Aland'), 
@@ -45,6 +45,18 @@ OSCAR_landC.process(
 
 def Eq__D_Fland(Var, Par):
     return (Var.D_nbp * (Par.Aland_pi + Var.D_Aland)).sum('bio_land', min_count=1)
+
+
+## land carbon sink (including permafrost)
+OSCAR_landC.process(
+    Out = 'D_Fland_pf', 
+    In = ('D_Fland',), 
+    In2 = ('D_Epf_CO2',),
+    Eq = lambda Var, Par: Eq__D_Fland_pf(Var, Par), 
+    units = 'PgC yr-1')
+
+def Eq__D_Fland_pf(Var, Par):
+    return Var.D_Fland.sum('reg_land', min_count=1) - (Var.D_Epf_CO2 if 'D_Epf_CO2' in Var else 0.)
 
 
 ## replaced sources and sinks (RSS) 
@@ -61,6 +73,19 @@ def Eq__D_Frss(Var, Par):
 
 
 ## ADDITIONAL DIAGNOSTICS
+
+## total NBP (i.e. net atmosphere-to-land flux)
+OSCAR_landC.process(
+    Out = 'NBP', 
+    In = ('D_nbp', 'D_Aland', 'D_NBP_bk'), 
+    Eq = lambda Var, Par: Eq__NPP(Var, Par), 
+    units = 'PgC yr-1')
+
+def Eq__NBP(Var, Par):
+    NBP_env = Var.D_nbp * (Par.Aland_pi + Var.D_Aland)
+    NBP_bk = Var.D_NBP_bk #.sum('dist_bk', min_count=1)
+    return NBP_env + NBP_bk
+
 
 ## total NPP
 OSCAR_landC.process(
@@ -175,7 +200,7 @@ def Eq__Chwp(Var, Par):
     return (Par.Chwp_bk_pi + Var.D_Chwp_bk).sum('box_hwp', min_count=1)
 
 
-## total land carbon stock
+## total land carbon stock (excl. permafrost!)
 OSCAR_landC.process(
     Out = 'Cland', 
     In = ('Cveg', 'Ccwd', 'Csoil', 'Chwp'), 
@@ -184,6 +209,17 @@ OSCAR_landC.process(
 
 def Eq__Cland(Var, Par):
     return Var.Cveg + Var.Ccwd + Var.Csoil + Var.Chwp
+
+
+## actual biome area
+OSCAR_landC.process(
+    Out = 'Aland', 
+    In = ('D_Aland',), 
+    Eq = lambda Var, Par: Eq__Aland(Var, Par), 
+    units = 'Mha')
+
+def Eq__Aland(Var, Par):
+    return Var.D_Aland + Par.Aland_pi
 
 
 ##=====================

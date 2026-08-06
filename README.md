@@ -1,10 +1,12 @@
 # OSCAR 🌍
 
-We are excited to announce the release of **OSCAR v4**! OSCAR is an open-source, reduced-complexity Earth system model (ESM) designed to probabilistically emulate the coupled climate–carbon–chemistry system. This latest version introduces enhanced numerical stability, modular submodels, and recalibration using AR6, CMIP6, and TRENDY datasets.
+We are excited to announce the release of **OSCAR v4**! OSCAR is an open-source, reduced-complexity Earth system model (ESM) designed to probabilistically emulate the coupled climate–carbon–chemistry system. This latest version introduces enhanced numerical stability, modular submodels, and recalibration using AR6, CMIP6, and TRENDY datasets, among other things.
 
 > [!WARNING]
 > ### ⚠️ Beta Version - Active Development
-> This package is currently in **Beta (v4-beta0)**. We are actively refining features and documentation.
+> This package is currently in **Beta (v4-beta1)**. We are actively refining features and documentation.
+>
+> We expect a stable v4.0 by the end of 2026.
 > 
 > **Action Required:** Expect frequent updates in the coming months; please keep your package up to date.
 > 
@@ -16,12 +18,21 @@ We are excited to announce the release of **OSCAR v4**! OSCAR is an open-source,
 
 ## 📖 Scientific Background
 
-OSCAR v4 bridges comprehensive ESMs and simpler reduced-complexity approaches, providing rapid, policy-relevant probabilistic projections. 
+OSCAR v4 bridges comprehensive ESMs and simpler reduced-complexity approaches, providing rapid, policy-relevant, probabilistic climate projections. 
 
 **Key Improvements:**
+- User-oriented functionalities.
 - Modularized code for independent submodel execution.
-- Robust Monte Carlo & Latin-hypercube sampling for improved probabilistic ensembles.
+- Robust Monte Carlo & Latin hypercube sampling for improved probabilistic ensembles.
 - Benchmarked via the Reduced Complexity Model Intercomparison Project (RCMIP) phase 3.
+
+**References:**
+
+**v4.0 |** Gasser et al., *in preparation*.
+
+**v3.1 |** Gasser, T., L. Crepin, Y. Quilcaille, R. A. Houghton, P. Ciais & M. Obersteiner. "Historical CO<sub>2</sub> emissions from land-use and land-cover change and their uncertainty." *Biogeosciences* 17: 4075–4101 (2020). [doi:10.5194/bg-17-4075-2020](https://doi.org/doi:10.5194/bg-17-4075-2020)
+
+**v2.2 |** Gasser, T., P. Ciais, O. Boucher, Y. Quilcaille, M. Tortora, L. Bopp & D. Hauglustaine. "The compact Earth system model OSCAR v2.2: description and first results." *Geoscientific Model Development* 10: 271-319 (2017). [doi:10.5194/gmd-10-271-2017](https://doi.org/doi:10.5194/gmd-10-271-2017)
 
 ---
 
@@ -61,7 +72,7 @@ You can both **inspect** a mode and **execute** it from the Terminal or Python.
 | **General** | Package overview & guidance | `oscar` | `oscar.info()` | — | — | ✅ Available |
 | **Standard** | Instant verification simulation | `oscar info standard` | `oscar.info("standard")` | `oscar run` | `oscar.run()` | ✅ Available |
 | **Configured** | Official scenario library runs | `oscar info configured` | `oscar.info("configured")` | `oscar run -m configured` | `oscar.run(mode="configured")` | ✅ Available |
-| **Customized** | User-defined research workflows | — | `oscar.info("customized")` | — | `oscar.run(mode="customized")` | 🚧 In Development |
+| **Customized** | User-defined research workflows | — | `oscar.info("customized")` | — | `oscar.run(mode="customized")` | ✅ Available |
 | **Advanced** | Core model development | — | — | — | `oscar.run(mode="advanced")` | 🚧 In Development |
 
 > **Note:** Scientific modes (Configured and above) require access to a large data library.  
@@ -86,7 +97,7 @@ import oscar
 oscar.run(
     mode="configured", 
     scenario=["scen7-VL","scen7-H"], 
-    region="RCP_5reg"
+    variables=["D_Tg"]
 )
 ```
 ### Python (Customized Mode)

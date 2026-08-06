@@ -2,9 +2,9 @@ import warnings
 import numpy as np
 import xarray as xr
 
-from core.fct_load import load_data
-from core.fct_precalib import run_precalib
-from core.fct_regions import aggreg_regions
+from oscar._core._base.fct_load import load_data
+from oscar._core._base.fct_precalib import run_precalib
+from oscar._core._base.fct_regions import aggreg_regions
 
 
 name = 'biomass-burning_GFED4'

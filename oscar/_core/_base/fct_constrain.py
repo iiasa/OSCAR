@@ -1,455 +1,455 @@
-####################################
-# Constrain function for OSCAR v3
-####################################
-
-# import libraries
 import os
+import ast
 import yaml
 import numpy as np
 import xarray as xr
-from scipy.stats import norm, lognorm, skewnorm, qmc
-from scipy.optimize import minimize
-
+import operator as op
 import matplotlib.pyplot as plt
 
+from scipy.stats import norm, lognorm, skewnorm, qmc
+from scipy.optimize import differential_evolution, least_squares
 
-#region constrain
-#region define functions
-#region 1. load and parse constraints
-def load_and_parse_constraints(yaml_path):
-    '''
-    Load constraint specifications from a YAML file and evaluate mathematical expressions
 
-    Input:
-    ------
-    yaml_path (str)             path to the constraints YAML file
+##################################################
+##   1. READ CONSTRAINTS AS YAML
+##################################################
 
-    Output:
-    -------
-    parsed_specs (list)         list of dicts with evaluated mean and std values
-    '''
-    
-    with open(yaml_path, 'r') as f:
+## load constraints from yaml file
+def load_constraints_yaml(path):
+    """
+    Example structures
+    ------------------
+    constraints:
+      - name: D_Tg              # must be an OSCAR variable
+        base: [1850, 1900]
+        period: [2014, 2023]
+        mean: 1.19
+        std: 0.10
+      - name: D_CO2
+        distrib: lognormal
+        period: [2023, 2023]
+        pcts: {5: 130, 50: 141, 95: 152}
+    """
+    with open(path, 'r') as f:
         config = yaml.safe_load(f)
+    constraints = [_format_constraint(c) for c in config['constraints']]
+    return {c['name']: c for c in constraints}
+
+
+## save a (possibly hand-crafted) set of constraints to a yaml file
+## note: doesn't quite work in all cases / needs improvement
+'''
+def save_constraints_yaml(constraints, path):
+    if isinstance(constraints, dict):
+        constraints = list(constraints.values())
+    with open(path, 'w') as f:
+        yaml.safe_dump({'constraints': constraints}, f, sort_keys=False)
+'''
+
+
+## format constraint input, allowing for variations in writing
+def _format_constraint(constraint):
     
-    parsed_specs = []
-    for spec in config['constraints']:
-        # Evaluate math expressions if provided as strings
-        if 'mean_eqn' in spec:
-            spec['mean'] = eval(str(spec['mean_eqn']))
-            
-        if 'std_eqn' in spec:
-            spec['std'] = eval(str(spec['std_eqn']))
-            
-        parsed_specs.append(spec)
-    return parsed_specs
-#endregion
+    ## initialize
+    c = dict(constraint)
 
-#region 2. format var
-def format_var(ds_var, var_specs):
-    '''
-    format variable according to variable specifications from a dataset
+    ## accept "name", "var" or "variable" as synonyms for the default "name"
+    name = c.pop("name", None) or c.get("var") or c.get("variable")
+    c.pop("var", None)
+    c.pop("variable", None)
+    c["name"] = name
 
-    Input:
-    ------
-    ds (xr.Dataset)             dataset containing the variables
-    var_specs (dict)            variable specifications (from YAML)
+    ## mean and std (can be equations)
+    if 'mean' in c:
+        c['mean'] = _safe_eval_numeric(c['mean'])
+    if 'std' in c:
+        c['std'] = _safe_eval_numeric(c['std'])
 
-    Output:
-    -------
-    var_new (xr.DataArray)      formatted variable values
-    '''
+    ## separate percentiles (can be equations)
+    flat_pcts = {}
+    for key in list(c.keys()):
+        if key == 'median':
+            flat_pcts[50.] = _safe_eval_numeric(c.pop('median'))
+        elif key[:1] == 'p' and key[1:].replace('.', '', 1).isdigit():
+            flat_pcts[float(key[1:])] = _safe_eval_numeric(c.pop(key))
+    if flat_pcts and 'pcts' not in c:
+        c['pcts'] = flat_pcts
+    elif 'pcts' in c:
+        c['pcts'] = {float(k): _safe_eval_numeric(v) for k, v in c['pcts'].items()}
 
-    name = var_specs['name']
+    ## return
+    return c
 
-    # 1. Get time-frames from the specs (now expected as lists/tuples from YAML)
-    baseline = var_specs.get('base', None)
-    period = var_specs.get('period', None)
-    
-    print(f'Formatting {name}: period={period}, baseline={baseline}')
 
-    # 2. Calculate baseline mean
-    # We use index [0] and [1] instead of * to prevent argument count errors
-    if baseline:
-        var_baseline = ds_var.sel(year=slice(baseline[0], baseline[1])).mean(dim='year')
+## safe operators for safe eval
+_SAFE_OPS = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv,
+            ast.Pow: op.pow, ast.USub: op.neg, ast.UAdd: op.pos}
+
+
+## function to safely evaluate provided expression
+def _safe_eval_numeric(expr):
+    def _eval(node):
+        if isinstance(node, ast.Expression):
+            return _eval(node.body)
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_OPS:
+            return _SAFE_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_OPS:
+            return _SAFE_OPS[type(node.op)](_eval(node.operand))
+        raise ValueError(f"Unsupported expression in constraint YAML: {expr!r}")
+    return _eval(ast.parse(str(expr), mode='eval'))
+
+
+##################################################
+##   2. BUILD DISTRIBUTIONS
+##################################################
+
+## small wrapper to get multiple distribs
+def build_distribs(constraints, only=None):
+    distribs = {}
+    for name, c in [(name, c) for name, c in constraints.items() if only is None or name in only]:
+        distribs[name] = build_distrib(mean=c.get('mean'), std=c.get('std'), pcts=c.get('pcts'), distrib=c.get('distrib'))
+    return distribs
+
+
+## make one frozen scipy distrib
+def build_distrib(mean=None, std=None, pcts=None, distrib=None):
+
+    ## if percentiles provided
+    if pcts is not None:
+        pcts = {float(k): float(v) for k, v in pcts.items()}
+        if len(pcts) not in (3, 5):
+            raise ValueError('percentiles must have exactly 3 or 5 points')
+        if 50 not in pcts:
+            raise ValueError('percentiles must include the 50th percentile (median)')
+
+        ## take distrib if provived otherwise test symmetry
+        distrib = distrib or ('normal' if _pcts_are_symmetric(pcts) else 'skewnormal')
+
+        ## fit distribution
+        if distrib == 'normal':
+            loc, scale = _fit_normal_to_pcts(pcts)
+            return norm(loc=loc, scale=scale)
+        elif distrib == 'lognormal':
+            log_pcts = {k: np.log(v) for k, v in pcts.items()}
+            mu, sigma = _fit_normal_to_pcts(log_pcts)
+            return lognorm(s=sigma, scale=np.exp(mu))
+        elif distrib == 'skewnormal':
+            return _fit_skewnormal_to_pcts(pcts)
+        else:
+            raise ValueError(f"Unsupported distrib '{distrib}' for percentiles input")
+
+    ## if mean & std provided
+    elif mean is not None and std is not None:
+        distrib = distrib or 'normal'
+        if distrib == 'normal':
+            return norm(loc=mean, scale=std)
+        elif distrib == 'lognormal':
+            mu = np.log(mean**2 / np.sqrt(std**2 + mean**2))
+            sigma = np.sqrt(np.log(1 + (std / mean)**2))
+            return lognorm(s=sigma, scale=np.exp(mu))
+        else:
+            raise ValueError(f"Unsupported dist '{distrib}' for mean & std input")
+
     else:
-        var_baseline = 0
-    
-    # 3. Calculate target period mean
-    if period:
-        var_target = ds_var.sel(year=slice(period[0], period[1])).mean(dim='year')
-    else:
-        # If no period is specified, use the full available timeseries
-        var_target = ds_var
-    
-    # 4. Calculate the anomaly/delta
-    var_new = var_target - var_baseline
-    
-    # Ensure the DataArray carries the name defined in the constraint specs
-    var_new.name = name
-    
-    return var_new
-#endregion
+        raise ValueError('Provide either mean & std, or percentiles')
 
-#region 3. mahalanobis distance
-def mahalanobis_distance(x, mean, inv_cov):
-    '''
-    Compute the Mahalanobis distance of each row in x from the mean
 
-    Input:
-    ------
-    x (np.ndarray)          array of shape (n_samples, n_features)
-    mean (np.ndarray)       mean vector of shape (n_features,)
-    inv_cov (np.ndarray)    inverse covariance matrix of shape (n_features, n_features)
+## function to check if symmetric
+def _pcts_are_symmetric(pcts, tol=0.05):
+    median = pcts[50]
+    spread = max(pcts.values()) - min(pcts.values())
+    lows = sorted(p for p in pcts if p < 50)
+    highs = sorted((p for p in pcts if p > 50), reverse=True)
+    if len(lows) != len(highs):
+        return False
+    for lo, hi in zip(lows, highs):
+        if abs((100 - hi) - lo) > 1e-6:  # not a matched pair, e.g. 5 & 95
+            return False
+        if abs((median - pcts[lo]) - (pcts[hi] - median)) > tol * spread:
+            return False
+    return True
 
-    Output:
-    -------
-    (np.ndarray)            array of shape (n_samples,) with Mahalanobis distances
-    '''
+
+## function to fit normal distrib to pcts
+def _fit_normal_to_pcts(pcts):
+    ## 
+    q = np.array(sorted(pcts.keys())) / 100.0
+    v = np.array([pcts[100 * qi] for qi in q])
+    z = norm.ppf(q)
+    A = np.column_stack([np.ones_like(z), z])
+    (loc, scale), *_ = np.linalg.lstsq(A, v, rcond=None)
+    return loc, max(scale, 1e-9)
+
+
+## function to fit skewed normal distrib to pcts
+def _fit_skewnormal_to_pcts(pcts, max_nfev=300, warn_tol=0.02, bounds=([-5, 1e-6, -30], [5, 5, 30])):
+
+    ## read pcts
+    q = np.array(sorted(pcts.keys())) / 100.0
+    v_raw = np.array([pcts[100 * qi] for qi in q])
+    
+    ## normalize
+    median = pcts[50]
+    spread = v_raw.max() - v_raw.min()
+    if spread <= 0:
+        raise ValueError('percentile values must be strictly increasing')
+    v = (v_raw - median) / spread
+
+    ## define distance
+    def residuals(params):
+        loc, scale, shape = params
+        if scale <= 0:
+            return np.full_like(v, 1e6)
+        return skewnorm.ppf(q, shape, loc=loc, scale=scale) - v
+
+    ## try solving with least_squares and different shape parameters
+    best_params, best_cost = None, np.inf
+    for shape0 in (-8, -4, -2, -1, 0, 1, 2, 4, 8):
+        try:
+            result = least_squares(residuals, [0.0, 1.0, shape0], bounds=bounds, max_nfev=max_nfev)
+        except Exception:
+            continue
+        cost = np.sum(result.fun**2)
+        if cost < best_cost:
+            best_cost, best_params = cost, result.x
+
+    ## bounded global search if large residuals
+    if best_params is None or best_cost > warn_tol**2 * len(v):
+        result = differential_evolution(
+            lambda p: np.sum(residuals(p)**2),
+            bounds=list(zip(*bounds)), seed=0, maxiter=max_nfev, polish=True,
+        )
+        if result.fun < best_cost:
+            best_cost, best_params = result.fun, result.x
+
+    ## raise if failed fit
+    if best_params is None:
+        raise RuntimeError(f'skew-normal fit failed for pcts {pcts}; change constraint!')
+
+    ## de-normalize
+    loc_n, scale_n, shape = best_params
+    loc, scale = loc_n * spread + median, scale_n * spread
+
+    ## check fit error
+    fit_error = np.sqrt(best_cost / len(v)) * spread
+    if fit_error > warn_tol * spread:
+        print(f"Warning: skew-normal fit residual is {fit_error:.3g} "
+              f"({100 * fit_error / spread:.1f}% of percentile spread) for {pcts}")
+
+    ## return
+    return skewnorm(shape, loc=loc, scale=scale)
+
+
+##################################################
+##   3. APPLY CONSTRAINING
+##################################################
+
+## get variable value over specified period and w.r.t. specified baseline
+def _get_var_eval(da, base=None, period=None, time_axis='year',
+    sum_dims=['reg_land', 'bio_land', 'bio_from', 'bio_to']):
+    for dim in [dim for dim in da.dims if dim in sum_dims]: da = da.sum(dim, min_count=1)
+    target = da.sel({time_axis: slice(*period)}).mean(time_axis) if period else da
+    baseline = da.sel({time_axis: slice(*base)}).mean(time_axis) if base else 0
+    return target - baseline
+
+
+## Mahalanobis distance
+def _mahalanobis_dist(x, mean, inv_cov):
     diff = x - mean
     return np.sqrt(np.sum(diff @ inv_cov * diff, axis=1))
-#endregion
 
-#region 4. apply constraints and select configurations
-def dist_spec(spec, values, method='cdf'):
-    '''
-    Evaluate distribution specified by spec at given values
-    Input:
-    ------
-    spec (dict)         distribution specification
-    values (np.ndarray) values at which to evaluate
 
-    Output:
-    -------
-    vals (np.ndarray)   evaluated values
+## main function to apply constraining and select ensemble members
+def apply_constraining(Out_prior, constraints, n_select, distribs=None, 
+    config_axis='config', time_axis='year', frac_mahalanobis=1.0, seed=None):
+    print(26*'=')
+    print('---', 'APPLY CONSTRAINING', '---')
+    print(26*'=')
 
-    Options:
-    --------
-    method (str)       method to use: 'cdf', 'pdf', or 'ppf'
-                       default = 'cdf'
-    '''
-    
-    if spec['type'] == 'normal':
-        # normal distribution
-        if method == 'cdf': vals = norm.cdf(values, loc=spec['mean'], scale=spec['std'])
-        if method == 'pdf': vals = norm.pdf(values, loc=spec['mean'], scale=spec['std'])
-        if method == 'ppf': vals = norm.ppf(values, loc=spec['mean'], scale=spec['std'])
-        
-    elif spec['type'] == 'lognormal':
-        # lognormal distribution - convert mean/std to lognormal parameters
-        mean, std = spec['mean'], spec['std']
-        mu = np.log(mean**2 / np.sqrt(std**2 + mean**2))
-        sigma = np.sqrt(np.log(1 + (std/mean)**2))
-        if method == 'cdf': vals = lognorm.cdf(values, s=sigma, scale=np.exp(mu))
-        if method == 'pdf': vals = lognorm.pdf(values, s=sigma, scale=np.exp(mu))
-        if method == 'ppf': vals = lognorm.ppf(values, s=sigma, scale=np.exp(mu))
-    
-    elif spec['type'] == 'percentile':
-        # percentile-based distribution (e.g., 5th, median, 95th)
-        p5, median, p95 = spec['p5'], spec['median'], spec['p95']
-        
-        if abs((median - p5) - (p95 - median)) < 1e-10:
-            # symmetric percentiles - use normal approximation
-            mean = median
-            std = (p95 - p5) / (norm.ppf(0.95) - norm.ppf(0.05))
-            if method == 'cdf': vals = norm.cdf(values, loc=mean, scale=std)
-            if method == 'pdf': vals = norm.pdf(values, loc=mean, scale=std)
-            if method == 'ppf': vals = norm.ppf(values, loc=mean, scale=std)
-        else:
-            # non-symmetric - use properly fitted skew-normal distribution
-            loc, scale, shape = fit_skewnorm_from_percentiles(p5, median, p95)
-            if method == 'cdf': vals = skewnorm.cdf(values, shape, loc=loc, scale=scale)
-            if method == 'pdf': vals = skewnorm.pdf(values, shape, loc=loc, scale=scale)
-            if method == 'ppf': vals = skewnorm.ppf(values, shape, loc=loc, scale=scale)
+    ## list constraints
+    skip_vars = [name for name, c in constraints.items() if c.get('skip', False)]
+    used_vars = [name for name in constraints if name not in skip_vars]
+    n_constraints = len(used_vars)
 
-    elif spec['type'] == 'skewnormal':
-        # direct skew-normal parameters
-        loc, scale, shape = spec['loc'], spec['scale'], spec['shape']
-        if method == 'cdf': vals = skewnorm.cdf(values, shape, loc=loc, scale=scale)
-        if method == 'pdf': vals = skewnorm.pdf(values, shape, loc=loc, scale=scale)
-        if method == 'ppf': vals = skewnorm.ppf(values, shape, loc=loc, scale=scale)
-
-    return vals
-#endregion
-
-#region 5. fit skew-normal distribution to percentiles
-def fit_skewnorm_from_percentiles(p5, median, p95, max_iter=100):
-    '''
-    Properly fit skew-normal distribution to percentiles using optimization
-
-    Input:
-    ------
-    p5 (float)          5th percentile
-    median (float)      50th percentile (median)
-    p95 (float)         95th percentile
-
-    Output:
-    -------
-    loc (float)         location parameter of fitted skew-normal
-    scale (float)       scale parameter of fitted skew-normal
-    shape (float)       shape parameter of fitted skew-normal
-
-    Options:
-    --------
-    max_iter (int)      maximum iterations for optimization
-                        default = 100
-    '''
-    def objective(params):
-        loc, scale, shape = params
-        try:
-            dist = skewnorm(shape, loc=loc, scale=scale)
-            p5_est = dist.ppf(0.05)
-            median_est = dist.ppf(0.5)
-            p95_est = dist.ppf(0.95)
-            
-            # weight errors by importance (focus on matching percentiles)
-            error = (abs(p5_est - p5) + 
-                    2 * abs(median_est - median) +  # Emphasize median
-                    abs(p95_est - p95))
-            return error
-        except:
-            return np.inf
-    
-    # better initial guesses
-    initial_guesses = [
-        [median, (p95 - p5)/3.0, 0.0],      # near-normal
-        [median, (p95 - p5)/2.5, 2.0],      # positive skew
-        [median, (p95 - p5)/2.5, -2.0],     # negative skew
-        [(p5 + median + p95)/3, (p95 - p5)/2.0, 1.0],  # balanced
-    ]
-    
-    best_params = None
-    best_error = np.inf
-    
-    for init_guess in initial_guesses:
-        try:
-            result = minimize(objective, init_guess, 
-                            bounds=[(None, None), (1e-6, None), (None, None)],
-                            method='L-BFGS-B',
-                            options={'maxiter': max_iter})
-            
-            if result.success and result.fun < best_error:
-                best_error = result.fun
-                best_params = result.x
-        except:
-            continue
-    
-    if best_params is None:
-        # fallback: use empirical CDF
-        print(f'Warning: Skew-normal fit failed for percentiles p5={p5}, median={median}, p95={p95}')
-        print('Falling back to empirical distribution')
-        return None
-    
-    loc, scale, shape = best_params
-    
-    # verify the fit
-    dist = skewnorm(shape, loc=loc, scale=scale)
-    p5_fit = dist.ppf(0.05)
-    median_fit = dist.ppf(0.5)
-    p95_fit = dist.ppf(0.95)
-    
-    print(f'Skew-normal fit: p5={p5_fit:.3f} (target {p5:.3f}), '
-          f'median={median_fit:.3f} (target {median:.3f}), '
-          f'p95={p95_fit:.3f} (target {p95:.3f})')
-    
-    return loc, scale, shape
-#endregion
-
-#region 6. main function to apply constraints and select configurations
-def LHS_configs(simulated_results, constraint_specs, N_post, frac_ma=1, use_scipy=True):
-    '''
-    Select configurations using Latin Hypercube sampling in constraint space
-    Returns the selected CONFIG INDICES
-    
-    Input:
-    ------
-    simulated_results (np.ndarray)          simulated results for each configuration
-    constraint_specs (list of dicts)        specification for temperature and CO2 distributions
-    N_post (int)                            number of configurations to select
-    
-    Output:
-    --------
-    selected_indices (np.ndarray of int)    config indices that were selected
-
-    Options:
-    --------
-    frac_ma (float)                         fraction of Mahalanobis distance in combined distance metric
-                                            default = 1 (only Mahalanobis distance)
-    use_scipy (bool)                        whether to use scipy's LHS sampler
-                                            default = True
-    '''
-    
-    n_constraints = simulated_results.shape[1]
-    
-    # create LHS space in constraint space
-    if use_scipy:
-        sampler = qmc.LatinHypercube(d=n_constraints)
-        lhs_design = sampler.random(n=N_post)
-        print('Using scipy\'s LatinHypercube sampler')
+    ## build distributions
+    print('***', 'building distributions', '***')
+    if distribs is None:
+        distribs = build_distribs(constraints, only=used_vars)
     else:
-        # Generate optimal Latin Hypercube design
-        lhs_design = np.zeros((N_post, n_constraints), dtype=float)
-        for j in range(n_constraints):
-            ## ? whether to use fixed or random position within each bin
-            lhs_design[:, j] = (np.random.permutation(N_post) + np.random.uniform(0.1, 0.9)) / N_post
-        print('Using custom LatinHypercube sampler')
+        distribs = {name: distrib for name, distrib in distribs.items() if name in used_vars}
 
-    uniform_space = np.zeros((N_post, n_constraints), dtype=float)
-    
-    for j, spec in enumerate(constraint_specs):
-        values = lhs_design[:, j]
-        uniform_space[:, j] = dist_spec(spec, values, method='ppf')
+    ## get model results and format
+    print('***', 'getting model outputs', '***')
+    Out_eval = xr.Dataset({name: _get_var_eval(Out_prior[name], base=c.get('base'), period=c.get('period'), time_axis=time_axis) for name, c in constraints.items()})
+    X = Out_eval[used_vars].to_array(dim='_constraint').transpose(config_axis, '_constraint').values
 
-    # calculate covariance for Mahalanobis distance
-    cov_matrix = np.cov(uniform_space.T)
+    ## check and track members with any NaN (failed computations)
+    ## will be excluded from pool of available configs
+    valid = ~np.isnan(X).any(axis=1)
+    Out_eval = Out_eval.assign_coords(valid=(config_axis, valid))
+
+    ## LHS
+    print('***', 'Latin Hypercube sampling', '***')
+    sampler = qmc.LatinHypercube(d=n_constraints, seed=seed)
+    lhs_design = sampler.random(n=n_select)
+    real_space = np.column_stack([distribs[c].ppf(lhs_design[:, n]) for n, c in enumerate(used_vars)])
+
+    ## covariations
+    cov = np.atleast_2d(np.cov(real_space.T))
     try:
-        inv_cov_ma = np.linalg.inv(cov_matrix)
+        inv_cov_ma = np.linalg.inv(cov)
     except np.linalg.LinAlgError:
         inv_cov_ma = np.eye(n_constraints)
-
     inv_cov_eu = np.eye(n_constraints)
 
-    # for each LHS point drawn from the observational space, find the closest prior sample
-    selected_indices = []
-    used_indices = set()
+    ## select configs
+    print('***', 'selecting configurations', '***')
+    selected, used = [], []
+    for real in real_space:
+        available = np.array([i for i in range(X.shape[0]) if valid[i] and i not in used])
+        if available.size == 0:
+            break
+        points = X[available]
+        dist_ma = _mahalanobis_dist(points, real, inv_cov_ma)
+        dist_eu = _mahalanobis_dist(points, real, inv_cov_eu)
+        dist_combined = frac_mahalanobis * dist_ma + (1 - frac_mahalanobis) * dist_eu
+        best_config = available[np.argmin(dist_combined)]
+        selected.append(best_config)
+        used.append(best_config)
+
+    ## return
+    return np.sort(Out_eval.config.isel({'config': selected}).values), Out_eval
+
+
+##################################################
+##   4. DIAGNOSTICS & PLOTTING
+##################################################
+
+## quick summary print
+def print_constraining(Out_eval, constraints, selected, distribs=None, config_axis='config'):
     
-    for lhs_point in uniform_space:
-        available_mask = ~np.isin(np.arange(len(simulated_results)), list(used_indices))
-        available_indices = np.where(available_mask)[0]
-        
-        if len(available_indices) == 0: break
-            
-        available_points = simulated_results[available_indices]
-        
-        # calculate both distances
-        dist_mahalanobis = mahalanobis_distance(available_points, lhs_point, inv_cov_ma)
-        dist_euclidean = mahalanobis_distance(available_points, lhs_point, inv_cov_eu)
-
-        # combine distances
-        combined_distances = frac_ma * dist_mahalanobis + (1 - frac_ma) * dist_euclidean
-        
-        best_idx = available_indices[np.argmin(combined_distances)]
-        selected_indices.append(best_idx)
-        used_indices.add(best_idx)
+    ## get distribs
+    if distribs is None:
+        distribs = build_distribs(constraints)
     
-    return selected_indices
-#endregion
-#region 7. constraining pipeline
-def run_constraining_pipeline(ds, specs, n_post, vars_to_constrain):
-    """
-    A generic pipeline: 
-    1. Filters specs based on vars_to_constrain
-    2. Formats variables based on specs
-    3. Runs LHS
-    4. Returns selected indices
+    ## formating function
+    def _fmt(x):
+        if not np.isfinite(x): return f'{x}'
+        n_int_digits = len(str(int(abs(x)))) if abs(x) >= 1 else 0
+        if n_int_digits >= 4: return f'{x:.0f}'
+        elif n_int_digits == 3: return f'{x:.0f}.'
+        elif n_int_digits == 2: return f'{x:.1f}'
+        else: return f'{x:.2f}'
 
-    Input:
-    ------
-    ds (xr.Dataset)             dataset containing the variables
-    specs (list of dicts)       list of constraint specifications
-    n_post (int)                number of configurations to select
-    vars_to_constrain (list)    list of variable names to constrain (must match 'name' in specs)
-    
-    Output:
-    -------
-    indices (np.ndarray)        selected configuration indices
-    valid_specs (list)          specs that were successfully used
-    sim_results (np.ndarray)    the formatted data matrix used for selection
-    """
-    formatted_list = []
-    valid_specs = []
-    
-    for spec in specs:
-        name = spec['name']
-        
-        # 1. Filter: only proceed if this spec name is in target list
-        if name not in vars_to_constrain:
-            continue
-            
-        try:    
-            # 1. Handle variable selection and basic math (e.g., "D_Fland - D_Eluc")
-            if " - " in name:
-                parts = name.split(" - ")
-                # Subtract the DataArrays directly from the dataset
-                ds_var = ds[parts[0]] - ds[parts[1]]
-            else:
-                ds_var = ds[name]
+    ## print
+    for name, distrib in distribs.items():
+        prior, post = Out_eval[name].values, Out_eval[name].sel({config_axis: selected}).values
+        units = constraints[name].get('units', '')
+        print(f"\n--- {name}{f' ({units})' if units else ''} ---")
+        print(f"target:      mean={_fmt(distrib.mean())}, std={_fmt(distrib.std())}" + "  (SKIPPED)" * constraints[name].get('skip', False))
+        print(f"prior:       mean={_fmt(np.nanmean(prior))}, std={_fmt(np.nanstd(prior))}  (n={int(Out_eval['valid'].sum())})")
+        print(f"posterior:   mean={_fmt(post.mean())}, std={_fmt(post.std())}  (n={post.size})")
 
-            # 2. Format the time-series into a scalar value (e.g. mean of 2014-2023)
-            v_eff = format_var(ds_var, spec)
-            
-            formatted_list.append(v_eff.values)
-            valid_specs.append(spec)
-            
-        except KeyError:
-            print(f"Skipping {name}: Variable not found in dataset.")
-        except Exception as e:
-            print(f"Skipping {name}: Error during formatting: {e}")
 
-    if not formatted_list:
-        raise ValueError("No variables from vars_to_constrain were found or successfully formatted.")
+## control plot
+def plot_constraining(Out_eval, constraints, selected, distribs=None, config_axis='config', plot_ncols=4):
 
-    # 3. Stack results into (n_samples, n_constraints) matrix
-    sim_results = np.column_stack(formatted_list)
-    
-    # 4. Run Latin Hypercube Selection
-    print(f"Running LHS selection for {n_post} samples using {len(valid_specs)} constraints...")
-    indices = LHS_configs(sim_results, valid_specs, N_post=n_post)
-    
-    return indices, valid_specs, sim_results
-#endregion
+    ## get distribs
+    if distribs is None:
+        distribs = build_distribs(constraints)
 
-#region validation & visualization
-def analyze_selection(selected_indices, valid_specs, sim_results):
-    print('\n=== LATIN HYPERCUBE SELECTION RESULTS ===')
-    print(f'Selected {len(selected_indices)} configurations')
-    print(f'Selected config indices: {selected_indices[:10]}...')  # Show first 10
+    ## names & skip status
+    names = [c for c in distribs if c in Out_eval]
+    skip_vars = {c for c in names if constraints[c].get('skip', False)}
 
-    for j, spec in enumerate(valid_specs):
-        selected_vals = sim_results[:, j][selected_indices]
-        all_vals = sim_results[:, j]
-        
-        print(f'\n--- {spec['name']} ({spec['type']}) ---')
-        print(f'Observed constraint: {spec}')
-        print(f'All configs:    mean={all_vals.mean():.2f}, std={all_vals.std():.2f}')
-        print(f'Selected configs: mean={selected_vals.mean():.2f}, std={selected_vals.std():.2f}')
-        print(f'Selected range: [{selected_vals.min():.2f}, {selected_vals.max():.2f}]')
-        
-        if spec['type'] == 'lognormal':
-            # log-space analysis
-            log_selected = np.log(selected_vals)
-            log_all = np.log(all_vals)
-            print(f'Log-space - All: μ={log_all.mean():.3f}, σ={log_all.std():.3f}')
-            print(f'Log-space - Selected: μ={log_selected.mean():.3f}, σ={log_selected.std():.3f}')
-        if spec['type'] == 'percentile':
-            # percentile analysis
-            p5, median, p95 = np.percentile(selected_vals, [5, 50, 95])
-            print(f'Percentiles of selected: 5th={p5:.2f}, 50th={median:.2f}, 95th={p95:.2f}')
+    ## layout
+    panel_size = (3, 2.5)
+    nrows = int(np.ceil(len(names) / plot_ncols))
+    fig, axes = plt.subplots(nrows, plot_ncols, squeeze=False, figsize=(panel_size[0] * plot_ncols, panel_size[1] * nrows))
+    axes_flat = axes.flatten()
 
-def plot_selection_results(selected_indices, valid_specs, sim_results):
+    ## loop over constraints
+    for ax, name in zip(axes_flat, names):
 
-    if len(sim_results[1]) > 2:
-        fig, axes = plt.subplots(2, (len(sim_results[1]) + 1) // 2, figsize=((len(sim_results[1]) + 1) // 2 * 4, 8))
-    else:
-        fig, axes = plt.subplots(1, len(sim_results[1]), figsize=(len(sim_results[1]) * 4, 4))
+        ## get info
+        is_skipped = name in skip_vars
+        prior = Out_eval[name].values[Out_eval['valid'].values] # take only valid configs
+        post = Out_eval[name].sel({config_axis: selected}).values
+        units = constraints[name].get('units', '')
 
-    for i in range(len(sim_results[1])):
-        if len(sim_results[1]) != 1:
-            ax = axes[i % 2, i // 2] if len(sim_results[1]) > 2 else axes[i]
+        ## histograms
+        ax.hist(prior, bins=30, density=True, alpha=0.4, color='gray', label=f'prior (n={prior.size})')
+        if is_skipped:
+            ax.hist(post, bins=20, density=True, histtype='step', color='steelblue', linewidth=1.5, alpha=0.6)
         else:
-            ax = axes
-        var = sim_results[:, i]
-        selected_var = sim_results[:, i][selected_indices]
+            ax.hist(post, bins=20, density=True, alpha=0.5, color='steelblue', label=f'posterior (n={post.size})')
 
-        ax.hist(var, bins=30, alpha=0.5, density=True, label='All', color='gray')
-        ax.hist(selected_var, bins=20, alpha=0.5, density=True, label='Sel', color='blue')
-        x = np.linspace(var.min(), var.max(), 100)
-        ax.plot(x, dist_spec(valid_specs[i], x, method='pdf'), color='red', linestyle='--', lw=2, label='Obs')
-        ax.set_ylabel('Density')
-        ax.set_xlabel(f'{valid_specs[i]['units']}')
-        ax.set_title(f'{valid_specs[i]['name']}')
-        ax.legend()
-    
-    plt.tight_layout()
+        ## target distribution curve
+        distrib = distribs[name]
+        lo = min(prior.min(), post.min(), distrib.ppf(0.01))
+        hi = max(prior.max(), post.max(), distrib.ppf(0.99))
+        x = np.linspace(lo, hi, 200)
+        ax.plot(x, distrib.pdf(x), color='crimson', ls='--', lw=2, label='target')
+
+        ## restrict visible x-range
+        #view_lo = min(distrib.mean() - 5 * distrib.std(), post.min())
+        #view_hi = max(distrib.mean() + 5 * distrib.std(), post.max())
+        #ax.set_xlim(view_lo, view_hi)
+
+        ## highlight skipped constraints
+        if is_skipped:
+            ax.hist(post, bins=20, density=True, alpha=0.4, color='lightgray', label='posterior')
+            ax.set_title(f"{name} ({units}) · skipped" if units else f'{name} · skipped', color='gray', fontsize='medium')
+            for spine in ax.spines.values(): spine.set_edgecolor('lightgray')
+            ax.tick_params(colors='gray')
+        else:
+            ax.set_title(f'{name} ({units})' if units else name, fontsize='medium')
+
+    ## hide unused axes
+    for ax in axes_flat[len(names):]:
+        ax.axis('off')
+
+    ## shared legend
+    handles, labels = axes_flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='lower center', ncol=3, frameon=False)
+    fig.tight_layout(rect=[0, 0.04, 1, 1])
+
+    ## return
     return fig, axes
-#endregion
+
+
+##################################################
+##   5. WRAPPER
+##################################################
+
+## wrapper for constraining pipeline
+def constraining_pipeline(Out_prior, constraints, n_select, 
+    config_axis='config', time_axis='year', 
+    frac_mahalanobis=1.0, seed=None, 
+    plot_ncols=4, save_figure=None):
+
+    ## read file if path provided (assumes yaml)
+    if isinstance(constraints, (str, os.PathLike)):
+        constraints = load_constraints_yaml(constraints)
+
+    ## build distribs once
+    distribs = build_distribs(constraints)
+
+    ## apply
+    selected, Out_eval = apply_constraining(Out_prior, constraints, n_select, distribs=distribs, 
+        config_axis=config_axis, time_axis=time_axis, frac_mahalanobis=frac_mahalanobis, seed=seed)
+
+    ## print
+    print_constraining(Out_eval, constraints, selected, distribs=distribs, 
+        config_axis=config_axis)
+
+    ## plot
+    plot_constraining(Out_eval, constraints, selected, distribs=distribs, 
+        config_axis=config_axis, plot_ncols=plot_ncols)
+    if save_figure:
+        plt.savefig(save_figure, dpi=200)
+
+    ## return
+    return selected, Out_eval

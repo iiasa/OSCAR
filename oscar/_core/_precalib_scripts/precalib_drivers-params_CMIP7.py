@@ -5,6 +5,7 @@ import xarray as xr
 from oscar._core._base.fct_load import load_data
 from oscar._core._base.fct_precalib import run_precalib
 from oscar._core._base.fct_regions import aggreg_regions
+from oscar._core._base.fct_drivers import format_LUH, format_CMIP_emis
 
 from oscar._core._params_spec.Cst import Cst
 from oscar._core._params_spec.Par_CH4 import get_params as get_params_CH4
@@ -19,15 +20,15 @@ name = 'drivers-params_CMIP7'
 t_lag = get_params_strato().t_lag
 
 ## get OH and hv present-day periods
-years_OH = get_params_CH4().v_CH4_OH.years
-years_hv = get_params_N2O().v_N2O_hv.years
+years_OH = get_params_CH4().v_CH4_OH_pd.years
+years_hv = get_params_N2O().v_N2O_hv_pd.years
 
 ## definition of LUC present-day period
-year_PD = 2023
+year_pd = 2022
 
 ## definition of preindustrial period
-year_PI = 1750
-years_PI = (1750, 1760) # because of IAV
+year_pi = 1750
+years_pi = (1750, 1760) # because of IAV
 
 
 ##################################################
@@ -39,87 +40,60 @@ years_PI = (1750, 1760) # because of IAV
 ##=========
 
 ## precalibration function
-def precalib_params(mod_region, no_warnings=True):
+def precalib_params(mod_region, keep_all_Ebb=False, no_warnings=True):
     with warnings.catch_warnings():
         if no_warnings: warnings.filterwarnings('ignore')
 
-    ## load reference datasets
-    ds_emis = load_data('emissions_CMIP7').sum('reg_code', min_count=1, keep_attrs=True).sel(scen='hist', drop=True)
-    ds_conc = load_data('concentrations_CMIP7').sel(scen='hist', drop=True)
-    ds_land = aggreg_regions(load_data('land-use_LUH3').sel(scen='hist', drop=True), mod_region)
+        ## load reference datasets
+        ds_emis = aggreg_regions(load_data('emissions_CMIP7').sel(scen='hist', drop=True), mod_region)
+        ds_land = aggreg_regions(load_data('land-use_LUH3').sel(scen='hist', drop=True), mod_region)
+        ds_conc = load_data('concentrations_CMIP7').sel(scen='hist', drop=True)
 
-    ## initialization
-    Par = xr.Dataset()
+        ## initialization
+        Par = xr.Dataset()
 
-
-    ## preindustrial emissions of precursors
-    ## anthropogenic
-    for spc in ['SO2', 'BC', 'OC', 'NOx', 'CO', 'VOC']:
-        Par[f'Eant_{spc}_pi'] = ds_emis[f'Eant_{spc}'].sel(year=year_PI, drop=True).sum('sect', min_count=1)
-        Par[f'Eant_{spc}_pi'].attrs['units'] = ds_emis[f'Eant_{spc}'].units
-        Par[f'Eant_{spc}_pi'].attrs['year'] = year_PI
-    ## aviation and shipping
-    for sec in ['air', 'shp']:
-        Par[f'E{sec}_NOx_pi'] = ds_emis['Eant_NOx'].sel(year=year_PI, sect=sec, drop=True)
-        Par[f'E{sec}_NOx_pi'].attrs['units'] = ds_emis['Eant_NOx'].units
-        Par[f'E{sec}_NOx_pi'].attrs['year'] = year_PI
-    ## biomass burning
-    for spc in ['SO2', 'BC', 'OC', 'NOx', 'CO', 'VOC']:
-        Par[f'Ebb_{spc}_pi'] = ds_emis[f'Eant_{spc}'].sel(year=slice(*years_PI), drop=True).sum('sect', min_count=1).mean('year')
-        Par[f'Ebb_{spc}_pi'].attrs['units'] = ds_emis[f'Ebb_{spc}'].units
-        Par[f'Ebb_{spc}_pi'].attrs['years'] = years_PI
+        ## emissions
+        ## get formatted params
+        ds_tmp = format_CMIP_emis(ds_emis, 
+            year_pi=year_pi, years_pi=years_pi, years_pd=years_OH, 
+            scen_hist='hist', sect_endo=['bor', 'def', 'for', 'tem', 'gra'])
+        ds_tmp = ds_tmp.drop_vars([var for var in ds_tmp if var.startswith('D_') and not var.endswith('_pd')])
+        ## drop full Ebb
+        if not keep_all_Ebb:
+            ds_tmp = ds_tmp.drop_vars([var for var in ds_tmp if 'Ebb_' in var and var.endswith('_pi')])
+            ds_tmp = ds_tmp.drop_vars([var for var in ds_tmp if 'Ebb2_' in var and var.endswith('_pd')])
+        ## assign
+        for var in ds_tmp:
+            Par[var] = ds_tmp[var]
 
 
-    ## present-day emissions of precursors (delta)
-    ## anthropogenic
-    for spc in ['NOx', 'CO', 'VOC']:
-        Par[f'D_Eant_{spc}_pd'] = ds_emis[f'Eant_{spc}'].sel(year=slice(*years_OH), drop=True).sum('sect', min_count=1).mean('year')
-        Par[f'D_Eant_{spc}_pd'] -= Par[f'Eant_{spc}_pi']
-        Par[f'D_Eant_{spc}_pd'].attrs['units'] = ds_emis[f'Eant_{spc}'].units
-        Par[f'D_Eant_{spc}_pd'].attrs['years'] = years_OH
-    ## aviation and shipping
-    for sec in ['air', 'shp']:
-        Par[f'D_E{sec}_NOx_pd'] = ds_emis['Eant_NOx'].sel(year=slice(*years_OH), sect=sec, drop=True).mean('year')
-        Par[f'D_E{sec}_NOx_pd'] -= Par[f'E{sec}_NOx_pi']
-        Par[f'D_E{sec}_NOx_pd'].attrs['units'] = ds_emis['Eant_NOx'].units
-        Par[f'D_E{sec}_NOx_pd'].attrs['years'] = years_OH
-    ## biomass burning
-    for spc in ['NOx', 'CO', 'VOC']:
-        Par[f'D_Ebb_{spc}_pd'] = ds_emis[f'Eant_{spc}'].sel(year=slice(*years_OH), drop=True).sum('sect', min_count=1).mean('year')
-        Par[f'D_Ebb_{spc}_pd'] -= Par[f'Ebb_{spc}_pi']
-        Par[f'D_Ebb_{spc}_pd'].attrs['units'] = ds_emis[f'Ebb_{spc}'].units
-        Par[f'D_Ebb_{spc}_pd'].attrs['years'] = years_OH
-
-
-    ## present-day concentrations
-    ## CH4, N2O, halogens
-    years_dict = {'CH4': years_OH, 'N2O': years_hv, 'Xhalo': years_hv}
-    for spc in ['CH4', 'N2O', 'Xhalo']:
-        Par[f'{spc}_pd'] = ds_conc[spc].sel(year=slice(*years_dict[spc])).mean('year')
-        Par[f'{spc}_pd'].attrs['units'] = ds_conc[spc].units
-        Par[f'{spc}_pd'].attrs['years'] = years_dict[spc]
-    ## lagged halogens
-    Par['Xhalo_lag_pd'] = np.nan + xr.zeros_like(Par.spc_halo).astype(float) + xr.zeros_like(t_lag)
-    for age_air in t_lag.age_air.values:
-        if float.is_integer(float(t_lag.loc[age_air])):
-            Par['Xhalo_lag_pd'].loc[:, age_air] = ds_conc.Xhalo.sel(year=slice(*[yr - int(t_lag.loc[age_air]) for yr in years_dict['Xhalo']])).mean('year')
-        elif float.is_integer(float(t_lag.loc[age_air] - 0.5)): 
-            Par['Xhalo_lag_pd'].loc[:, age_air] = ds_conc.Xhalo.rolling(year=2).mean().sel(year=slice(*[yr - int(t_lag.loc[age_air]) for yr in years_dict['Xhalo']])).mean('year')
-    Par['Xhalo_lag_pd'].attrs['units'] = ds_conc[spc].units
-    Par['Xhalo_lag_pd'].attrs['years'] = years_dict[spc]
-
-
-    ## preindustrial and present-day land cover
-    Par['Aland_pi'] = (ds_land.Aland1 + ds_land.Aland2).sel(year=year_PI, drop=True)
-    Par['Aland_pi'].attrs['year'] = year_PI
-    Par['Aland_pd'] = (ds_land.Aland1 + ds_land.Aland2).sel(year=year_PD, drop=True)
-    Par['Aland_pd'].attrs['year'] = year_PD
-
-    ## preindustrial land use activities
-    Par['dA_harv_pi'] = (ds_land.dA_harv1 + ds_land.dA_harv2).sel(year=year_PI, drop=True)
-    Par['dA_harv_pi'].attrs['year'] = year_PI
-    Par['dA_shift_pi'] = ds_land.dA_shift.sel(year=year_PI, drop=True)
-    Par['dA_shift_pi'].attrs['year'] = year_PI
+        ## land use
+        ## get formatted params
+        ds_tmp = format_LUH(ds_land, 
+            year_pi=year_pi, year_pd=year_pd, 
+            scen_hist='hist', keep_harv_dC=False)
+        ds_tmp = ds_tmp.drop_vars([var for var in ds_tmp if var.startswith('D_')])
+        ## assign
+        for var in ds_tmp:
+            Par[var] = ds_tmp[var]
+        
+        
+        ## concentrations
+        ## CH4, N2O, halogens
+        years_dict = {'CH4': years_OH, 'N2O': years_hv, 'Xhalo': years_hv}
+        for spc in ['CH4', 'N2O', 'Xhalo']:
+            Par[f'{spc}_pd'] = ds_conc[spc].sel(year=slice(*years_dict[spc])).mean('year')
+            Par[f'{spc}_pd'].attrs['units'] = ds_conc[spc].units
+            Par[f'{spc}_pd'].attrs['years'] = years_dict[spc]
+        ## lagged halogens
+        Par['Xhalo_lag_pd'] = np.nan + xr.zeros_like(Par.spc_halo).astype(float) + xr.zeros_like(t_lag)
+        for age_air in t_lag.age_air.values:
+            if float.is_integer(float(t_lag.loc[age_air])):
+                Par['Xhalo_lag_pd'].loc[:, age_air] = ds_conc.Xhalo.sel(year=slice(*[yr - int(t_lag.loc[age_air]) for yr in years_dict['Xhalo']])).mean('year')
+            elif float.is_integer(float(t_lag.loc[age_air] - 0.5)): 
+                Par['Xhalo_lag_pd'].loc[:, age_air] = ds_conc.Xhalo.rolling(year=2).mean().sel(year=slice(*[yr - int(t_lag.loc[age_air]) for yr in years_dict['Xhalo']])).mean('year')
+        Par['Xhalo_lag_pd'].attrs['units'] = ds_conc[spc].units
+        Par['Xhalo_lag_pd'].attrs['years'] = years_dict[spc]
 
 
     ## return

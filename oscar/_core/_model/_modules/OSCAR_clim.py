@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 
 from oscar._core._base.cls_main import Model
+from oscar._core._base.fct_solve import safe_ratio
 
 
 #####################################################################
@@ -82,6 +83,17 @@ def Eq__D_OHC(Var, Par):
     return Par.p_ohc * (Par.Th_g * Var.D_Tg + Par.Th_d * Var.D_Td)
 
 
+## Earth energy imbalance
+OSCAR_clim.process(
+    Out = 'EEI', 
+    In = ('D_Tg', 'D_Td'), 
+    Eq = lambda Var, Par: Eq__EEI(Var, Par), 
+    units = 'W yr m-2')
+
+def Eq__EEI(Var, Par):
+    return Par.Th_g * Var.D_Tg + Par.Th_d * Var.D_Td
+
+
 ## climate feedback factor
 OSCAR_clim.process(
     Out = 'lambda', 
@@ -93,7 +105,7 @@ def Eq__lambda(Var, Par):
     return Par.lambda_0 + Par.th_0 * (Par.e_ohu - 1) * (1 - Var.D_Td / Var.D_Tg)
 
 
-## regional mean temperature
+## regional surface temperature
 OSCAR_clim.process(
     Out = 'D_Tl', 
     In = ('D_Tg', ), 
@@ -104,7 +116,7 @@ def Eq__D_Tl(Var, Par):
     return Par.a_Tl_Tg * Var.D_Tg
 
 
-## regional mean precipitation
+## regional precipitation
 OSCAR_clim.process(
     Out = 'D_Pl', 
     In = ('D_Pg', 'D_Tl'), 
@@ -115,12 +127,23 @@ def Eq__D_Pl(Var, Par):
     return Par.a_Pl_Pg * Var.D_Pg + Par.a_Pl_Tl * Var.D_Tl
 
 
+## relative change in regional precipitation
+OSCAR_clim.process(
+    Out = 'r_Pl', 
+    In = ('D_Pl',), 
+    Eq = lambda Var, Par: Eq__r_Pl(Var, Par), 
+    units = '1')
+
+def Eq__r_Pl(Var, Par):
+    return safe_ratio(1 + Var.D_Pl / Par.Pl_piC)
+
+
 ##=====================
 ## Node variables
 ##=====================
 
 ## global mean precipitation
-## note: made into a node variable because of ERF of SLCFs from BB emissions is instantaneous
+## note: node variable because ERF of SLCFs from BB emissions is instantaneous
 OSCAR_clim.process(
     Out = 'D_Pg', 
     In = ('D_Pg', 'D_Tg', 'ERF_atm'), 

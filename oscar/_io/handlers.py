@@ -7,14 +7,14 @@ import xarray as xr
 import numpy as np
 import re
 import yaml
-from .paths import PACKAGE_ROOT
+from oscar._io.paths import PACKAGE_ROOT
 
 # --- SHARED UTILS ---
 
 def load_var_mapping(format_type):
     """Loads the translation registry from resources."""
-    map_name = f"vars_{format_type}_map.yaml"
-    path = PACKAGE_ROOT / "oscar" / "_resources" / map_name
+    map_name = f"vars_map_{format_type}.yaml"
+    path = PACKAGE_ROOT / "oscar" / "_utils" /  "_resources" / map_name
     if not path.exists():
         raise FileNotFoundError(f"[OSCAR] Missing mapping registry: {map_name}")
     with open(path, "r", encoding="utf-8") as f:
@@ -27,7 +27,6 @@ def _melt_and_clean(csv_path):
     """
     # 1. Read the file (Auto-separator, Comma-decimal)
     df = pd.read_csv(csv_path, sep=None, decimal=',', engine='python')
-
     # 2. Clean column names (strip whitespace)
     df.columns = [str(c).strip() for c in df.columns]
 
@@ -67,60 +66,51 @@ def _melt_and_clean(csv_path):
     return df
 
 # --- STEP 1: VARIABLE TRANSLATORS ---
-
 def handle_atmospheric_vars(csv_path, format_type):
     """
     Step 1A: Chemical and Unit Translation for Emissions and RF.
     Includes diagnostic info for non-matching variables.
     """
     import re
-    df = _melt_and_clean(csv_path)
-    mapping = load_var_mapping(format_type)
+    if format_type != 'oscar-csv':
+        df = _melt_and_clean(csv_path)
+        mapping = load_var_mapping(format_type)
 
-    df['oscar_var'] = None
-    df['oscar_id'] = None
+        df['oscar_var'] = None
+        df['oscar_id'] = None
 
-    # 1. Normalize CSV Variable names (Squeeze whitespace/newlines)
-    df['Variable'] = df['Variable'].astype(str).str.replace(r'\s+', '', regex=True)
+        # 1. Normalize CSV Variable names (Squeeze whitespace/newlines)
+        df['Variable'] = df['Variable'].astype(str).str.replace(r'\s+', '', regex=True)
 
-    # Track which registry keys were successfully matched
-    matched_keys = set()
+        # Track which registry keys were successfully matched
+        matched_keys = set()
 
-    for cat in ['emissions', 'radiative_forcing']:
-        if cat not in mapping: continue
-        
-        for registry_key, data in mapping[cat].items():
-            # 2. Normalize Registry Key (Squeeze whitespace/newlines)
-            clean_reg_key = re.sub(r'\s+', '', str(registry_key))
+        for cat in ['anthropogenic_emissions', 'radiative_forcing']:
+            if cat not in mapping: continue
             
-            mask = df['Variable'] == clean_reg_key
-            
-            if mask.any():
-                o_var, o_id, math_str = data[0], data[1], data[2]
-                df.loc[mask, 'Value'] = pd.to_numeric(df.loc[mask, 'Value']) * pd.eval(math_str)
-                df.loc[mask, 'oscar_var'] = o_var
-                df.loc[mask, 'oscar_id'] = o_id
-                matched_keys.add(registry_key)
-                #print(df[['Variable', 'Year', 'Value','oscar_var', 'oscar_id']].head(15))  # Debug: Show the first few matches for this registry key
+            for registry_key, data in mapping[cat].items():
+                # 2. Normalize Registry Key (Squeeze whitespace/newlines)
+                clean_reg_key = re.sub(r'\s+', '', str(registry_key))
+                
+                mask = df['Variable'] == clean_reg_key
+                
+                if mask.any():
+                    o_var, o_id, math_str = data[0], data[1], data[2]
+                    df.loc[mask, 'Value'] = pd.to_numeric(df.loc[mask, 'Value']) * pd.eval(math_str)
+                    df.loc[mask, 'oscar_var'] = o_var
+                    df.loc[mask, 'oscar_id'] = o_id
+                    matched_keys.add(registry_key)
+                    #print(df[['Variable', 'Year', 'Value','oscar_var', 'oscar_id']].head(15))  # Debug: Show the first few matches for this registry key
 
-    # --- 3. INFORMATION BLOCK: IDENTIFY MISMATCHES ---
-    '''
-    all_registry_keys = set()
-    for cat in ['emissions', 'radiative_forcing']:
-        if cat in mapping:
-            all_registry_keys.update(mapping[cat].keys())
-
-    missing = all_registry_keys - matched_keys
-    if missing:
-        print(f"\n[OSCAR INFO] The following {len(missing)} registry variables were NOT found in the CSV:")
-        # Print first 5 missing for brevity
-        for m in sorted(list(missing)):
-            print(f"  - Missing: {m}")
-        if len(missing) > 5:
-            print(f"  ... and {len(missing)-5} others.")
-    '''
-
-    # 4. Filter and Split
+        # rename the columns to match the expected output
+        df = df.rename(columns={'Scenario': 'scen', 'Year': 'year', 'Region': 'reg_input', 'Value': 'value'})
+    else:
+        # For 'oscar-csv' format, we assume the CSV already has the correct columns and values
+        df = pd.read_csv(csv_path, sep=None, decimal=',', engine='python')
+        # rename one column reg_land for convenience
+        df = df.rename(columns={'reg_land': 'reg_input'})
+    
+    # 3. Filter and Split
     df = df.dropna(subset=['oscar_var'])
     if df.empty:
         return xr.Dataset()
@@ -130,31 +120,21 @@ def handle_atmospheric_vars(csv_path, format_type):
     # These should NOT have a species dimension in the final Dataset
     df_std = df[df['oscar_var'] == df['oscar_id']]
 
-    # Group B: Halogens (E_Xhalo) - oscar_var is 'E_Xhalo', oscar_id is the compound name
+    # Group B: Halogens (D_Eant_Xhalo) - oscar_var is 'D_Eant_Xhalo', oscar_id is the compound name
     # These MUST have the spc_halo dimension
-    df_halo = df[df['oscar_var'] == 'E_Xhalo']
+    df_halo = df[df['oscar_var'] == 'D_Eant_Xhalo']
 
     datasets = []
 
     # Process Standard variables
     if not df_std.empty:
         # We pivot using 'oscar_var' as both column and index to keep it 3D (Scen, Year, Reg)
-        ds_std = df_std.pivot_table(
-            index=['Scenario', 'Year', 'Region'], 
-            columns='oscar_var', 
-            values='Value',
-            aggfunc='sum'
-        ).to_xarray()
+        ds_std = df_std.pivot_table(index=['scen', 'year', 'reg_input'], columns='oscar_var', values='value', aggfunc='sum').to_xarray()
         datasets.append(ds_std)
 
     # Process Halogens
     if not df_halo.empty:
-        ds_halo = df_halo.pivot_table(
-            index=['Scenario', 'Year', 'Region', 'oscar_id'], 
-            columns='oscar_var', 
-            values='Value',
-            aggfunc='sum'
-        ).to_xarray()
+        ds_halo = df_halo.pivot_table(index=['scen', 'year', 'reg_input', 'oscar_id'], columns='oscar_var', values='value',aggfunc='sum').to_xarray()
         # Rename the extra dimension to spc_halo
         ds_halo = ds_halo.rename({'oscar_id': 'spc_halo'})
         datasets.append(ds_halo)
@@ -165,16 +145,13 @@ def handle_atmospheric_vars(csv_path, format_type):
         
     ds = xr.merge(datasets)
     
-    # Standardize remaining dimension names
-    ds = ds.rename({'Scenario': 'scen', 'Year': 'year', 'Region': 'reg_input'})
-    
     # --- DEBUG PRINT ---
     '''
     print("\n--- XARRAY STRUCTURE CHECK ---")
     for v in ds.data_vars:
         print(f"Variable: {v:10} | Dimensions: {ds[v].dims}")
     '''
-        
+    
     return ds
 
 def handle_lulcc_vars(csv_path):
@@ -182,15 +159,13 @@ def handle_lulcc_vars(csv_path):
     Step 1B: Translates LULCC variables into a 5D pivot structure.
     """
     df = _melt_and_clean(csv_path)
-    ds = df.pivot_table(index=['Scenario', 'Year', 'Region', 'Bio_from', 'Bio_to'], 
-                        columns='Variable', values='Value').to_xarray()
+    ds = df.pivot_table(index=['Scenario', 'Year', 'Region', 'Bio_from', 'Bio_to'], columns='Variable', values='Value').to_xarray()
     
     return ds.rename({'Scenario': 'scen', 'Year': 'year', 'Region': 'reg_input'})
 
 # --- STEP 2: REGIONAL HANDLERS ---
 
 # --- SHARED REGIONAL UTILS ---
-
 def _load_allowed_regions(mod_region):
     """
     Retrieves the official list of region names for a specific resolution.
@@ -198,7 +173,7 @@ def _load_allowed_regions(mod_region):
     """
     import csv
     
-    reg_meta_path =  PACKAGE_ROOT / "oscar" / "_resources" / "regions_long_name.csv"
+    reg_meta_path =  PACKAGE_ROOT / "oscar" /"_core" / "_regions" / "OSCAR_reg_dict.csv"
     with open(reg_meta_path, "r") as f:
         reader = csv.reader(f)
         header = next(reader)
@@ -255,12 +230,14 @@ def handle_atmospheric_reg(ds, mod_region):
 
     # 5. ALIGN WITH MODEL RESOLUTION
     # OSCAR expects a 'reg_land' dimension with specific length
-    full_indices = np.arange(len(raw_allowed))
-    ds_out = ds_glob.expand_dims(reg_land=full_indices).copy()
+    # load the allowed regions
+    allowed_regions = _load_allowed_regions(mod_region)
+    ds_out = ds_glob.expand_dims(reg_land=allowed_regions).copy()
     
     for var in ds_out.data_vars:
-        # Place the total in Index 0 (Global/First Region), set others to 0.0
-        mask = ds_out.reg_land != 0
+        # Place the total in the first region (index 0) and set all other regions to 0.0
+        first_reg_land = ds_out.reg_land[0]
+        mask = ds_out.reg_land != first_reg_land
         ds_out[var] = ds_out[var].where(~mask, 0.0)
 
     # --- DEBUG: CHECK IF DATA SURVIVED ---
@@ -310,7 +287,6 @@ def handle_lulcc_reg(ds, mod_region):
     year_range = np.arange(int(ds_final.year.min()), int(ds_final.year.max()) + 1)
     return ds_final.interp(year=year_range, method="linear").fillna(0.0)
 
-# --- MASTER COMPILER ---
 
 # --- MASTER COMPILER ---
 
@@ -335,12 +311,9 @@ def compile_custom_forcing(project_path, user_csv_map, mod_region):
 
         print(f"- Compiling atmospheric forcing [Format: {atmo_format}]...")
         
-        ds_atmo_raw = handle_atmospheric_vars(
-            project_path / atmo_cfg['file'],
-            format_type=atmo_format
-        )
-        
+        ds_atmo_raw = handle_atmospheric_vars(project_path / atmo_cfg['file'],format_type=atmo_format)
         ds_atmo_final = handle_atmospheric_reg(ds_atmo_raw, mod_region)
+
         ds_final = xr.merge([ds_final, ds_atmo_final])
 
     # 2. Process Land-use (Assuming lulcc doesn't require strict format check yet)

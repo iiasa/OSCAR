@@ -5,7 +5,9 @@ import xarray as xr
 from oscar._io.paths import get_paths
 from oscar._core._base.fct_precalib import run_precalib
 from oscar._core._base.fct_regions import aggreg_regions
+
 path_precalib_in = get_paths()["precalib_data"]
+
 
 name = 'wood-use_Earles-2012'
 
@@ -24,7 +26,7 @@ def precalib_params(mod_region, no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data
-        with xr.open_dataset(path_precalib_in + f'{name}.nc') as TMP:
+        with xr.open_dataset(path_precalib_in / f'{name}.nc') as TMP:
             ## regional
             ds = aggreg_regions(TMP, mod_region, weight_var={var: '_area' for var in TMP if var != '_area'})
             ds = ds.drop_vars('_area').compute()

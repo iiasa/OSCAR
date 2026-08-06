@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 
 from oscar._core._base.cls_main import Model
+from oscar._core._base.fct_solve import sum_reg
 
 
 #####################################################################
@@ -331,4 +332,116 @@ def Eq__D_Ebb_VOC(Var, Par):
     D_Ebb2 = Var.D_Ebb2_VOC if 'D_Ebb2_VOC' in Var else 0. * D_Ebb1
     if 'reg_land' not in D_Ebb2.dims: D_Ebb2 = D_Ebb2 * (D_Ebb1.reg_land == D_Ebb1.reg_land.isel(reg_land=0, drop=True))
     return D_Ebb1 + D_Ebb2
+
+
+## ADDITIONAL DIAGNOSTICS
+
+## total biomass burning CH4 emissions
+OSCAR_fire.process(
+    Out = 'Ebb_CH4', 
+    In = ('D_Ebb_CH4',), 
+    Eq = lambda Var, Par: Eq__Ebb_CH4(Var, Par), 
+    units = 'TgC yr-1')
+
+def Eq__Ebb_CH4(Var, Par):
+    return sum_reg(Var.D_Ebb_CH4) + sum_reg(Par.Ebb_CH4_pi)
+
+
+## total biomass burning N2O emissions
+OSCAR_fire.process(
+    Out = 'Ebb_N2O', 
+    In = ('D_Ebb_N2O',), 
+    Eq = lambda Var, Par: Eq__Ebb_N2O(Var, Par), 
+    units = 'TgN yr-1')
+
+def Eq__Ebb_N2O(Var, Par):
+    return sum_reg(Var.D_Ebb_N2O) + sum_reg(Par.Ebb_N2O_pi)
+
+
+## total biomass burning H2 emissions
+OSCAR_fire.process(
+    Out = 'Ebb_H2', 
+    In = ('D_Ebb_H2',), 
+    Eq = lambda Var, Par: Eq__Ebb_H2(Var, Par), 
+    units = 'TgH2 yr-1')
+
+def Eq__Ebb_H2(Var, Par):
+    return sum_reg(Var.D_Ebb_H2) + sum_reg(Par.Ebb_H2_pi)
+
+
+## total biomass burning BC emissions
+OSCAR_fire.process(
+    Out = 'Ebb_BC', 
+    In = ('D_Ebb_BC',), 
+    Eq = lambda Var, Par: Eq__Ebb_BC(Var, Par), 
+    units = 'TgC yr-1')
+
+def Eq__Ebb_BC(Var, Par):
+    return sum_reg(Var.D_Ebb_BC) + sum_reg(Par.Ebb_BC_pi)
+
+
+## total biomass burning OC emissions
+OSCAR_fire.process(
+    Out = 'Ebb_OC', 
+    In = ('D_Ebb_OC',), 
+    Eq = lambda Var, Par: Eq__Ebb_OC(Var, Par), 
+    units = 'TgC yr-1')
+
+def Eq__Ebb_OC(Var, Par):
+    return sum_reg(Var.D_Ebb_OC) + sum_reg(Par.Ebb_OC_pi)
+
+
+## total biomass burning SO2 emissions
+OSCAR_fire.process(
+    Out = 'Ebb_SO2', 
+    In = ('D_Ebb_SO2',), 
+    Eq = lambda Var, Par: Eq__Ebb_SO2(Var, Par), 
+    units = 'TgS yr-1')
+
+def Eq__Ebb_SO2(Var, Par):
+    return sum_reg(Var.D_Ebb_SO2) + sum_reg(Par.Ebb_SO2_pi)
+
+
+## total biomass burning NH3 emissions
+OSCAR_fire.process(
+    Out = 'Ebb_NH3', 
+    In = ('D_Ebb_NH3',), 
+    Eq = lambda Var, Par: Eq__Ebb_NH3(Var, Par), 
+    units = 'TgN yr-1')
+
+def Eq__Ebb_NH3(Var, Par):
+    return sum_reg(Var.D_Ebb_NH3) + sum_reg(Par.Ebb_NH3_pi)
+
+
+## total biomass burning NOx emissions
+OSCAR_fire.process(
+    Out = 'Ebb_NOx', 
+    In = ('D_Ebb_NOx',), 
+    Eq = lambda Var, Par: Eq__Ebb_NOx(Var, Par), 
+    units = 'TgN yr-1')
+
+def Eq__Ebb_NOx(Var, Par):
+    return sum_reg(Var.D_Ebb_NOx) + sum_reg(Par.Ebb_NOx_pi)
+
+
+## total biomass burning CO emissions
+OSCAR_fire.process(
+    Out = 'Ebb_CO', 
+    In = ('D_Ebb_CO',), 
+    Eq = lambda Var, Par: Eq__Ebb_CO(Var, Par), 
+    units = 'TgC yr-1')
+
+def Eq__Ebb_CO(Var, Par):
+    return sum_reg(Var.D_Ebb_CO) + sum_reg(Par.Ebb_CO_pi)
+
+
+## total biomass burning VOC emissions
+OSCAR_fire.process(
+    Out = 'Ebb_VOC', 
+    In = ('D_Ebb_VOC',), 
+    Eq = lambda Var, Par: Eq__Ebb_VOC(Var, Par), 
+    units = 'Tg yr-1')
+
+def Eq__Ebb_VOC(Var, Par):
+    return sum_reg(Var.D_Ebb_VOC) + sum_reg(Par.Ebb_VOC_pi)
 

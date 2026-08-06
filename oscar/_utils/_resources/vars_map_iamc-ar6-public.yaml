@@ -1,0 +1,73 @@
+# ==============================================================================
+# OSCAR IAMC-AR6-PUBLIC TRANSLATION REGISTRY
+# ==============================================================================
+# Final Element in list is the Expected IAMC Unit for validation.
+# C: 12.011 | O: 15.999 | N: 14.007 | S: 32.06 | H: 1.008
+# ==============================================================================
+
+# 1. Standard Emissions (Regional)
+# Format: "IAMC_Name": ["OSCAR_VAR", "OSCAR_ID", "Calculation", "Expected_Unit"]
+anthropogenic_emissions:
+  # Standard Species (OSCAR_VAR == OSCAR_ID)
+  "Emissions|CO2|Energy and Industrial Processes": ["D_Eff", "D_Eff", "(12.011 / 44.009) / 1000", "Mt CO2/yr"]
+  "Emissions|CO2|AFOLU":                           ["D_Eluc", "D_Eluc", "(12.011 / 44.009) / 1000", "Mt CO2/yr"]
+  # Note: need to set internal biomass burning emissions to 0 for non-CO2 to be correct
+  "Emissions|CH4":                                 ["D_Eant_CH4", "D_Eant_CH4", "12.011 / 16.043", "Mt CH4/yr"]
+  "Emissions|N2O":                                 ["D_Eant_N2O", "D_Eant_N2O", "(28.014 / 44.013) / 1000", "kt N2O/yr"]
+  "Emissions|NOx":                                 ["D_Eant_NOX", "D_Eant_NOX", "14.007 / 46.005", "Mt NO2/yr"]
+  "Emissions|Sulfur":                              ["D_Eant_SO2", "D_Eant_SO2", "32.06 / 64.06", "Mt SO2/yr"]
+  "Emissions|NH3":                                 ["D_Eant_NH3", "D_Eant_NH3", "14.007 / 17.031", "Mt NH3/yr"]
+  "Emissions|VOC":                                 ["D_Eant_VOC", "D_Eant_VOC", "1.0", "Mt VOC/yr"]
+  "Emissions|BC":                                  ["D_Eant_BC", "D_Eant_BC", "1.0", "Mt BC/yr"]
+  "Emissions|OC":                                  ["D_Eant_OC", "D_Eant_OC", "1.0", "Mt OC/yr"]
+  "Emissions|CO":                                  ["D_Eant_CO", "D_Eant_CO", "12.011/(12.011+15.999)", "Mt CO/yr"]
+
+  # Halogens (OSCAR_VAR is D_Eant_Xhalo, OSCAR_ID is the specific compound)
+  # Multiplier 1.0 used because IAMC (kt) -> OSCAR (Gg) is 1:1
+  "Emissions|HFC|HFC134a":     ["D_Eant_Xhalo", "HFC-134a", "1.0", "kt HFC134a/yr"]
+  "Emissions|HFC|HFC23":       ["D_Eant_Xhalo", "HFC-23", "1.0", "kt HFC23/yr"]
+  "Emissions|HFC|HFC32":       ["D_Eant_Xhalo", "HFC-32", "1.0", "kt HFC32/yr"]
+  "Emissions|HFC|HFC125":      ["D_Eant_Xhalo", "HFC-125", "1.0", "kt HFC125/yr"]
+  "Emissions|HFC|HFC143a":     ["D_Eant_Xhalo", "HFC-143a", "1.0", "kt HFC143a/yr"]
+  "Emissions|HFC|HFC152a":     ["D_Eant_Xhalo", "HFC-152a", "1.0", "kt HFC152a/yr"]
+  "Emissions|HFC|HFC227ea":    ["D_Eant_Xhalo", "HFC-227ea", "1.0", "kt HFC227ea/yr"]
+  "Emissions|HFC|HFC236fa":    ["D_Eant_Xhalo", "HFC-236fa", "1.0", "kt HFC236fa/yr"]
+  "Emissions|HFC|HFC245fa":    ["D_Eant_Xhalo", "HFC-245fa", "1.0", "kt HFC245fa/yr"]
+  "Emissions|HFC|HFC365mfc":   ["D_Eant_Xhalo", "HFC-365mfc", "1.0", "kt HFC365mfc/yr"]
+  "Emissions|HFC|HFC43-10mee": ["D_Eant_Xhalo", "HFC-43-10mee", "1.0", "kt HFC43-10mee/yr"]
+  "Emissions|CFC|CFC11":       ["D_Eant_Xhalo", "CFC-11", "1.0", "kt CFC11/yr"]
+  "Emissions|CFC|CFC12":       ["D_Eant_Xhalo", "CFC-12", "1.0", "kt CFC12/yr"]
+  "Emissions|CFC|CFC113":      ["D_Eant_Xhalo", "CFC-113", "1.0", "kt CFC113/yr"]
+  "Emissions|CFC|CFC114":      ["D_Eant_Xhalo", "CFC-114", "1.0", "kt CFC114/yr"]
+  "Emissions|CFC|CFC115":      ["D_Eant_Xhalo", "CFC-115", "1.0", "kt CFC115/yr"]
+  "Emissions|CCl4":            ["D_Eant_Xhalo", "CCl4", "1.0", "kt CCl4/yr"]
+  "Emissions|CH3CCl3":         ["D_Eant_Xhalo", "CH3CCl3", "1.0", "kt CH3CCl3/yr"]
+  "Emissions|HCFC|HCFC22":     ["D_Eant_Xhalo", "HCFC-22", "1.0", "kt HCFC22/yr"]
+  "Emissions|HCFC|HCFC141b":   ["D_Eant_Xhalo", "HCFC-141b", "1.0", "kt HCFC141b/yr"]
+  "Emissions|HCFC|HCFC142b":   ["D_Eant_Xhalo", "HCFC-142b", "1.0", "kt HCFC142b/yr"]
+  "Emissions|CH3Cl":           ["D_Eant_Xhalo", "CH3Cl", "1.0", "kt CH3Cl/yr"]
+  "Emissions|CH3Br":           ["D_Eant_Xhalo", "CH3Br", "1.0", "kt CH3Br/yr"]
+  "Emissions|Halon|Halon1211": ["D_Eant_Xhalo", "Halon-1211", "1.0", "kt Halon1211/yr"]
+  "Emissions|Halon|Halon1301": ["D_Eant_Xhalo", "Halon-1301", "1.0", "kt Halon1301/yr"]
+  "Emissions|Halon|Halon2402": ["D_Eant_Xhalo", "Halon-2402", "1.0", "kt Halon2402/yr"]
+  "Emissions|SF6":             ["D_Eant_Xhalo", "SF6", "1.0", "kt SF6/yr"]
+  "Emissions|NF3":             ["D_Eant_Xhalo", "NF3", "1.0", "kt NF3/yr"]
+  "Emissions|C2F6":            ["D_Eant_Xhalo", "C2F6", "1.0", "kt C2F6/yr"]
+  "Emissions|C3F8":            ["D_Eant_Xhalo", "C3F8", "1.0", "kt C3F8/yr"]
+  "Emissions|C4F10":           ["D_Eant_Xhalo", "C4F10", "1.0", "kt C4F10/yr"]
+  "Emissions|C5F12":           ["D_Eant_Xhalo", "n-C5F12", "1.0", "kt C5F12/yr"]
+  "Emissions|C6F14":           ["D_Eant_Xhalo", "n-C6F14", "1.0", "kt C6F14/yr"]
+  "Emissions|C7F16":           ["D_Eant_Xhalo", "C7F16", "1.0", "kt C7F16/yr"]
+  "Emissions|c-C4F8":          ["D_Eant_Xhalo", "c-C4F8", "1.0", "kt c-C4F8/yr"]
+  "Emissions|PFC|CF4":         ["D_Eant_Xhalo", "CF4", "1.0", "kt CF4/yr"]
+  "Emissions|PFC|C8F18":       ["D_Eant_Xhalo", "C8F18", "1.0", "kt C8F18/yr"]
+  "Emissions|CH2Cl2":          ["D_Eant_Xhalo", "CH2Cl2", "1.0", "kt CH2Cl2/yr"]
+  "Emissions|CHCl3":           ["D_Eant_Xhalo", "CHCl3", "1.0", "kt CHCl3/yr"]
+  "Emissions|SO2F2":           ["D_Eant_Xhalo", "SO2F2", "1.0", "kt SO2F2/yr"]
+
+# 2. Radiative Forcing Anomalies (Global)
+# Format: "IAMC_Name": ["OSCAR_ID", "Calculation", "Expected_Unit"]
+radiative_forcing:
+  "Forcing|Solar": ["ERF_solar", "1.0", "W/m2"]
+  "Forcing|Volcanic": ["ERF_volc", "1.0", "W/m2"]
+  "Forcing": ["ERF", "1.0", "W/m2"]

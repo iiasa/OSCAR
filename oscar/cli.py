@@ -2,8 +2,8 @@
 OSCAR Command Line Interface
 """
 import click
-from .run import run as _run
-from .run import info as _info
+from oscar.run import run as _run
+from oscar.run import info as _info
 
 @click.group(invoke_without_command=True)
 @click.pass_context

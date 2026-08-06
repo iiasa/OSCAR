@@ -415,10 +415,14 @@ class Model():
             Var_out.attrs['model'] = self.name
             if get_final: Var_fin.attrs['model'] = self.name
 
-            ## add units to output
-            for var in Var_out: Var_out[var].attrs['units'] = self[var].units
+            ## clean up attributes and add units to output
+            for var in Var_out: 
+                Var_out[var].attrs = {}
+                Var_out[var].attrs['units'] = self[var].units
             if get_final: 
-                for var in Var_fin: Var_fin[var].attrs['units'] = self[var].units
+                for var in Var_fin: 
+                    Var_fin[var].attrs = {}
+                    Var_fin[var].attrs['units'] = self[var].units
 
         ## printing time counter
         print('total running time: {:.1f} minutes'.format((perf_counter() - t0) / 60))

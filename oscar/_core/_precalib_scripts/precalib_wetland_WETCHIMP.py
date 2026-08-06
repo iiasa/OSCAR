@@ -5,7 +5,9 @@ import xarray as xr
 from oscar._io.paths import get_paths
 from oscar._core._base.fct_precalib import run_precalib
 from oscar._core._base.fct_regions import aggreg_regions
+
 path_precalib_in = get_paths()["precalib_data"]
+
 
 name = 'wetland_WETCHIMP'
 
@@ -24,7 +26,7 @@ def precalib_params(mod_region, no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data on selected regions
-        with xr.open_dataset(path_precalib_in + f'{name}.nc') as TMP:
+        with xr.open_dataset(path_precalib_in / f'{name}.nc') as TMP:
             ds = aggreg_regions(TMP, mod_region, weight_var={'Tl': '_area', 'Pl': '_area'})
             ds = ds.compute()
 
@@ -72,8 +74,8 @@ def precalib_params(mod_region, no_warnings=True):
             Par[var] = Par[var].fillna(0.).where(Par[var].notnull().any('model'), Par[var])
         ## zero sensitivies if ref area or emissions are zero
         for var in ['ewet_piW', 'b_ewet_CO2', 'g_ewet_T', 'x_ewet_P', 'x_Awet_CO2', 'x_Awet_T', 'x_Awet_P']:
-            Par[var] = Par['Awet_piW'].where(Par['Awet_piW'] == 0, Par[var])
-            Par[var] = Par['ewet_piW'].where(Par['ewet_piW'] == 0, Par[var])
+            Par[var] = Par[var].where(Par['Awet_piW'] != 0, 0.)
+            Par[var] = Par[var].where(Par['ewet_piW'] != 0, 0.)
 
         ## print remaining NaN for info
         for var in Par:

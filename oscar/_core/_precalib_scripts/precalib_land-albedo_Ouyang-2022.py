@@ -2,9 +2,10 @@ import warnings
 import numpy as np
 import xarray as xr
 
-from oscarar._io.paths import get_paths
+from oscar._io.paths import get_paths
 from oscar._core._base.fct_precalib import run_precalib
 from oscar._core._base.fct_regions import aggreg_regions
+
 path_precalib_in = get_paths()["precalib_data"]
 
 
@@ -48,7 +49,7 @@ def precalib_params(mod_region, no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data on selected regions
-        with xr.open_dataset(path_precalib_in + f'{name}.nc') as TMP:
+        with xr.open_dataset(path_precalib_in / f'{name}.nc') as TMP:
             ds = aggreg_regions(TMP, mod_region)
             ds = ds.compute()
 

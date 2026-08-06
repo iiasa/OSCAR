@@ -24,8 +24,8 @@ OSCAR_N2O.process(
     units = 'yr-1')
 
 def Eq__v_N2O_hv(Par):
-    if 'f_hv_pd' not in Par: return None
-    return Par.v_N2O_hv_pd / Par.f_hv_pd
+    if 'r_hv_pd' not in Par: return None
+    return Par.v_N2O_hv_pd / Par.r_hv_pd
 
 
 ## preindustrial N2O lifetime
@@ -57,12 +57,12 @@ def Eq__Fsink_N2O_pi(Par):
 ## N2O stratospheric sink
 OSCAR_N2O.process(
     Out = 'D_Fhv_N2O', 
-    In = ('f_hv', 'D_N2O'), 
+    In = ('r_hv', 'D_N2O'), 
     Eq = lambda Var, Par: Eq__D_Fhv_N2O(Var, Par), 
     units = 'TgN yr-1')
 
 def Eq__D_Fhv_N2O(Var, Par):
-    return Par.a_N2O * Par.v_N2O_hv * ((Par.N2O_pi + Var.D_N2O) * Var.f_hv - Par.N2O_pi)
+    return Par.a_N2O * Par.v_N2O_hv * ((Par.N2O_pi + Var.D_N2O) * Var.r_hv - Par.N2O_pi)
 
 
 ## N2O total atmospheric sink
@@ -98,6 +98,8 @@ OSCAR_N2O.process(
 def Eq__d_N2O(Var, Par):
     return 1 / Par.a_N2O * (sum_reg(Var.D_Eant_N2O) + sum_reg(Var.D_Ebb_N2O) - Var.D_Fsink_N2O + Var.D_Emiss_N2O)
 
+
+## ADDITIONAL DIAGNOSTICS
 
 ## N2O residual emissions (= budget imbalance)
 ## note: non-zero only if d_N2O is prescribed!

@@ -3,9 +3,8 @@
 # ==========================================================
 metadata:
   zenodo_base_url: "https://zenodo.org/api/records/"
-  core_data: { version: "v4-beta0", zenodo_id: "" }
-  configured: { version: "v4-beta0", zenodo_id: "20778910" }
-  customized: { version: "v4-beta0", zenodo_id: "" } # feature not yet implemented
+  core_data:  { version: "v4-beta1", zenodo_id: "" }
+  run_mode: { version: "v4-beta1", zenodo_id: "21822036" }
   
   # Library Horizons
   build_end: &default_end 2100  # Official library ceiling
@@ -24,20 +23,17 @@ required_assets:
 registry:
   # Historical versions define the "Scientific Switch" year
   hist_versions:
-    #CMIP6: { hist_end: 2014, scen_start: 2015 }
-    CMIP7: { hist_end: 2023, scen_start: 2024 } # Placeholder for future CMIP7 data
+    CMIP6: { hist_start: 1750, hist_end: 2014, scen_start: 2015 }
+    CMIP7: { hist_start: 1750, hist_end: 2023, scen_start: 2024 } 
 
   # Variable Tiers
   v_core: &v_core ['D_Tg', 'D_CO2', 'D_CH4', 'D_N2O']
-  v_official: &v_off ['D_Focean', 'D_Fland', 'D_OHC', 'D_Eluc']
-  v_research: &v_res ['Cveg', 'Csoil', 'D_pthaw', 'D_Cfroz', 'D_Cthaw']
-  v_constrain: &v_constrain ['D_Tg', 'D_CO2', 'D_CH4', 'D_Focean', "ERF_ari", "ERF_aci", 'D_Focean']
 
   # Spatial & Scenario Bounds
-  all_regions: &regions ["RCP_5reg"]
-  #all_scenarios: &scens ['SSP1-1.9', 'SSP1-2.6', 'SSP2-4.5', 'SSP3-7.0', 'SSP3-7.0-LowNTCF', 'SSP4-3.4', 'SSP4-6.0', 'SSP5-3.4-OS', 'SSP5-8.5']
-  all_scenarios: &scens ['scen7-H', 'scen7-VL']
-
+  all_regions: &reg_all ['IAMC_R5','IAMC_R10']
+  all_scens:
+    scen6: &scen6 ['SSP1-1.9', 'SSP1-2.6', 'SSP2-4.5', 'SSP3-7.0', 'SSP3-7.0-LowNTCF', 'SSP4-3.4', 'SSP4-6.0', 'SSP5-3.4-OS', 'SSP5-8.5']
+    scen7: &scen7 ['scen7-H', 'scen7-M','scen7-VL']
 
 
 # ==========================================================
@@ -47,41 +43,37 @@ registry:
 # TIER 0: STANDARD (Verification)
 # Automated "Baseline" run
 standard_mode:
-  nMC: 50
+  nMC: 500
   hist_type: "CMIP7"
   # Run covers the full library range
   run_range: [1750, *default_end]
-  region: "RCP_5reg"
-  scenarios: *scens
+  region: "IAMC_R5"
+  scenarios: *scen7
   var_select: *v_core
 
 # TIER 1: CONFIGURED (Library Builder)
 configured_mode:
   official_nMC: 500
   run_end: *default_end
-  allowed_hist: ["CMIP7"] #NOTE: Add CMIP7 when available
-  allowed_regions: *regions
-  allowed_scenarios: *scens
-  allowed_variables: [*v_core, *v_off]
+  allowed_hist: ["CMIP6", "CMIP7"] #NOTE: Add CMIP7 when available
+  allowed_regions: *reg_all
   defaults:
     hist_type: "CMIP7"
-    region: "RCP_5reg"
+    region: "IAMC_R5"
     scenario: ["scen7-VL"]
     var_select: ["D_Tg", "D_CO2"]
 
 # TIER 2: CUSTOMIZED (User Research)
 customized_mode:
-  allowed_hist: ["CMIP7"] # NOTE: Add CMIP7 when available
+  allowed_hist: ["CMIP6", "CMIP7"] # NOTE: Add CMIP7 when available
   allowed_years: { min: 1750, max: *max_end }
-  allowed_regions: *regions
-  allowed_baselines: *scens
+  allowed_regions: *reg_all
   marker_scenarios: ['scen7-H', 'scen7-VL']
 
   output_themes:
     climate: *v_core
     land: ["D_CO2", "D_Fland", "D_Eluc", "Cveg", "Csoil"]
     permafrost: ["D_Tg", "D_pthaw", "D_Cfroz", "D_Cthaw"]
-    comprehensive: [*v_core, *v_off, *v_res]
     custom: null
 
   settings:
