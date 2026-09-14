@@ -51,8 +51,6 @@ def run_configured(
     scen_nr = hist_final[-1]  # Extracts the number from 'CMIP6' or 'CMIP7'
     allowed_scenarios = registry['all_scens'][f'scen{scen_nr}']
 
-    # define allowed variables
-    allowed_variables = cfg_full['v_all'] 
 
     # Setup Output Path
     out_dir = get_paths()['results'] / "configured_run"
@@ -65,8 +63,6 @@ def run_configured(
         _validate_choice(region_final, cfg_mode['allowed_regions'], "region")
         for s in scen_final:
             _validate_choice(s, allowed_scenarios, "scenario")
-        for v in vars_final:
-            _validate_choice(v, allowed_variables, "variable")
 
         # 4. LOAD LIBRARY COMPONENTS
         print(f"Loading official library for {region_final} ({n_mc} members)...")

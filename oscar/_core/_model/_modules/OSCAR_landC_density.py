@@ -30,7 +30,7 @@ OSCAR_landC_density.process(
     units = 'PgC Mha-1 yr-1')
 
 def Eq__npp_pi(Par):
-    fct_CO2= 1 + Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1)
+    fct_CO2 = 1 + Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1)
     return Par.k_npp * Par.npp_piL * fct_CO2
 
 
@@ -44,20 +44,21 @@ def Eq__b2_npp_CO2(Par):
     return Par.b_npp_CO2 * (Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 / (1 +  Par.b_npp_CO2 / Par.x_npp_CO2 * ((Par.CO2_pi / Par.CO2_piL) ** Par.x_npp_CO2 - 1))
 
 
+## adjusted preindustrial wildfire rate
+## note: assumes climate was same between PI and precalibration period
+OSCAR_landC_density.process(
+    Out = 'v_fire', 
+    Eq = lambda Par: Eq__v_fire(Par), 
+    units = 'yr-1')
+
+def Eq__v_fire(Par):
+    fct_CO2 = (Par.CO2_pi / Par.CO2_piL) ** Par.x_fire_CO2
+    return Par.v_fire_piL * fct_CO2
+
+
 ## COARSE WOODY DEBRIS
 
-## corrected fraction of npp going to woody biomass
-## note: set to 0. for anthropogenic biomes to prevent CWD
-OSCAR_landC_density.process(
-    Out = 'p2_npp_wood', 
-    Eq = lambda Par: Eq__p2_npp_wood(Par), 
-    units = '1')
-
-def Eq__p2_npp_wood(Par):
-    return Par.p_npp_wood.where((Par.bio_land == 'Forest') | (Par.bio_land == 'Non-Forest'), 0.)
-
-
-## coarse woody debris decay rate
+## coarse woody debris loss rate
 ## (Harmon et al., 2020; https://doi.org/10.1186/s13021-019-0136-6)
 OSCAR_landC_density.process(
     Out = 'v_cwd', 
@@ -68,7 +69,7 @@ def Eq__v_cwd(Par):
     return Par.v10_cwd * Par.q10_cwd ** ((Par.Tl_pi - Par.degC_to_K - 10) / 10)
 
 
-## coarse woody debris decay sensitivity to temperature
+## coarse woody debris loss sensitivity to temperature
 ## (Harmon et al., 2020; https://doi.org/10.1186/s13021-019-0136-6)
 OSCAR_landC_density.process(
     Out = 'g_cwd_T', 
@@ -88,10 +89,9 @@ OSCAR_landC_density.process(
     units = 'PgC Mha-1 yr-1')
 
 def Eq__ffall_pi(Par):
-    if 'p2_npp_wood' not in Par: return None
     if 'v_mort' not in Par: return None
     if 'cveg_pi' not in Par: return None
-    return (1 - Par.p2_npp_wood) * Par.v_mort * Par.cveg_pi
+    return (Par.v_mort - Par.p_wood / Par.t_wood) * Par.cveg_pi
 
 
 ## preindustrial vegetation carbon density
@@ -114,11 +114,10 @@ OSCAR_landC_density.process(
     units = 'PgC Mha-1')
 
 def Eq__ccwd_pi(Par):
-    if 'p2_npp_wood' not in Par: return None
     if 'v_mort' not in Par: return None
     if 'cveg_pi' not in Par: return None
     if 'v_cwd' not in Par: return None
-    return (Par.p2_npp_wood * Par.v_mort * Par.cveg_pi / Par.v_cwd).where(Par.v_cwd != 0, 0.)
+    return (Par.p_wood / Par.t_wood * Par.cveg_pi / Par.v_cwd).where(Par.v_cwd != 0, 0.)
 
 
 ## preindustrial soil carbon density
@@ -128,13 +127,12 @@ OSCAR_landC_density.process(
     units = 'PgC Mha-1')
 
 def Eq__csoil_pi(Par):
-    if 'p2_npp_wood' not in Par: return None
     if 'v_mort' not in Par: return None
     if 'v_resp' not in Par: return None
     if 'cveg_pi' not in Par: return None
     if 'ccwd_pi' not in Par: return None
     if 'v_cwd' not in Par: return None
-    return (((1 - Par.p2_npp_wood) * Par.v_mort * Par.cveg_pi + (1 - Par.p_cwd_resp) * Par.v_cwd * Par.ccwd_pi) / Par.v_resp).where(Par.v_resp != 0, 0.)
+    return (((Par.v_mort - Par.p_wood / Par.t_wood) * Par.cveg_pi + (1 - Par.p_cwd_resp) * Par.v_cwd * Par.ccwd_pi) / Par.v_resp).where(Par.v_resp != 0, 0.)
 
 
 ##=====================
@@ -149,8 +147,8 @@ OSCAR_landC_density.process(
     units = '1')
 
 def Eq__r_npp(Var, Par):
-    fct_CO2= (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
-    fct_Tl = safe_exp(Par.g_npp_T2 * 2 * Par.D_Topt_npp * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * Var.D_Tl**2)
+    fct_CO2 = (1 + Par.b2_npp_CO2 / Par.x_npp_CO2 * ((1 + Var.D_CO2 / Par.CO2_pi) ** Par.x_npp_CO2 - 1))
+    fct_Tl = safe_exp(Par.g_npp_T * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * np.maximum(Var.D_Tl, 0)**2)
     fct_Pl = safe_exp(Par.x_npp_P * np.log(Var.r_Pl), 100)
     return safe_ratio(fct_CO2* fct_Tl * fct_Pl)
 
@@ -191,16 +189,16 @@ def Eq__D_egraz(Var, Par):
 ## relative change in wildfire rate
 OSCAR_landC_density.process(
     Out = 'r_vfire', 
-    In = ('r_npp', 'D_Tl', 'r_Pl'), 
+    In = ('r_npp', 'D_CO2', 'D_Tl', 'r_Pl'), 
     Eq = lambda Var, Par: Eq__r_vfire(Var, Par), 
     units = '1')
 
 def Eq__r_vfire(Var, Par):
     fct_npp = safe_exp(Par.x_fire_npp * np.log(Var.r_npp), f_max(Par.v_fire))
-    fct_npp2 = safe_exp(Par.x_fire_npp2 * np.log(Var.r_npp)**2, f_max(Par.v_fire))
+    fct_CO2 = safe_exp(Par.x_fire_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi), f_max(Par.v_fire))
     fct_Tl = safe_exp(Par.g_fire_T * Var.D_Tl, f_max(Par.v_fire))
     fct_Pl = safe_exp(Par.g_fire_P * Par.Pl_pi * (Var.r_Pl - 1), f_max(Par.v_fire))
-    return fct_npp * fct_npp2 * fct_Tl * fct_Pl
+    return fct_npp * fct_CO2 * fct_Tl * fct_Pl
 
 
 ## wildfire emissions (areal)
@@ -239,19 +237,29 @@ def Eq__D_fmort(Var, Par):
     return Par.v_mort * ((Par.cveg_pi + Var.D_cveg) * Var.r_vmort - Par.cveg_pi)
 
 
+## coarse woody debris production flux (areal)
+OSCAR_landC_density.process(
+    Out = 'D_fcwd_prod', 
+    In = ('D_cveg',), 
+    Eq = lambda Var, Par: Eq__D_fcwd_prod(Var, Par), 
+    units='PgC Mha-1 yr-1')
+
+def Eq__D_fcwd_prod(Var, Par):
+    return 1/Par.t_wood * Par.p_wood * Var.D_cveg
+
+
 ## litterfall flux (areal)
-## note: assumes same fraction as during preindustrial
 OSCAR_landC_density.process(
     Out = 'D_ffall', 
-    In = ('D_fmort',), 
+    In = ('D_fmort', 'D_fcwd_prod'), 
     Eq = lambda Var, Par: Eq__D_ffall(Var, Par), 
     units='PgC Mha-1 yr-1')
 
 def Eq__D_ffall(Var, Par):
-    return (1 - Par.p2_npp_wood) * Var.D_fmort
+    return Var.D_fmort - Var.D_fcwd_prod
 
 
-## relative change in coarse woody debris decay rate
+## relative change in coarse woody debris loss rate
 OSCAR_landC_density.process(
     Out = 'r_vcwd', 
     In = ('D_Tl',), 
@@ -262,26 +270,26 @@ def Eq__r_vcwd(Var, Par):
     return safe_exp(Par.g_cwd_T * Var.D_Tl,  f_max(Par.v_cwd))
 
 
-## coarse woody debris decay flux (areal)
+## coarse woody debris loss flux (areal)
 OSCAR_landC_density.process(
-    Out = 'D_fcwd', 
+    Out = 'D_fcwd_loss', 
     In = ('r_vcwd', 'D_ccwd',), 
-    Eq = lambda Var, Par: Eq__D_fcwd(Var, Par), 
+    Eq = lambda Var, Par: Eq__D_fcwd_loss(Var, Par), 
     units='PgC Mha-1 yr-1')
 
-def Eq__D_fcwd(Var, Par):
+def Eq__D_fcwd_loss(Var, Par):
     return Par.v_cwd * ((Par.ccwd_pi + Var.D_ccwd) * Var.r_vcwd - Par.ccwd_pi)
 
 
 ## coarse woody debris emissions (areal)
 OSCAR_landC_density.process(
     Out = 'D_ecwd', 
-    In = ('D_fcwd',), 
+    In = ('D_fcwd_loss',), 
     Eq = lambda Var, Par: Eq__D_ecwd(Var, Par), 
     units='PgC Mha-1 yr-1')
 
 def Eq__D_ecwd(Var, Par):
-    return Par.p_cwd_resp * Var.D_fcwd
+    return Par.p_cwd_resp * Var.D_fcwd_loss
 
 
 ## relative change in soil respiration rate
@@ -292,7 +300,7 @@ OSCAR_landC_density.process(
     units = '1')
 
 def Eq__r_vresp(Var, Par):
-    fct_in = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + Var.D_ffall / Par.ffall_pi)),  f_max(Par.v_resp))
+    fct_in = safe_exp(Par.x_resp_fall * np.log(safe_ratio(1 + (Var.D_ffall / Par.ffall_pi).where(Par.ffall_pi != 0, 0.))),  f_max(Par.v_resp))
     fct_Tl = safe_exp(Par.g_resp_T * Var.D_Tl,  f_max(Par.v_resp))
     fct_Pl = safe_exp(Par.x_resp_P * np.log(Var.r_Pl),  f_max(Par.v_resp))
     return fct_in * fct_Tl * fct_Pl
@@ -343,14 +351,14 @@ def vLin__D_cveg(Par):
 ## coarse woody debris carbon stock (areal)
 OSCAR_landC_density.process(
     Out = 'D_ccwd', 
-    In = ('D_ccwd', 'D_fmort', 'D_ffall', 'D_fcwd'), 
+    In = ('D_ccwd', 'D_fcwd_prod', 'D_fcwd_loss'), 
     DiffEq = lambda Var, Par: DiffEq__D_ccwd(Var, Par), 
     vLin = lambda Par: vLin__D_ccwd(Par), 
     units='PgC Mha-1', 
     core_dims=['reg_land', 'bio_land'])
 
 def DiffEq__D_ccwd(Var, Par):
-    return (Var.D_fmort - Var.D_ffall) - Var.D_fcwd
+    return Var.D_fcwd_prod - Var.D_fcwd_loss
 
 def vLin__D_ccwd(Par):
     return Par.v_cwd
@@ -359,14 +367,14 @@ def vLin__D_ccwd(Par):
 ## soil carbon stock (areal)
 OSCAR_landC_density.process(
     Out = 'D_csoil', 
-    In = ('D_csoil', 'D_ffall', 'D_fcwd', 'D_ecwd', 'D_esoil'), 
+    In = ('D_csoil', 'D_ffall', 'D_fcwd_loss', 'D_ecwd', 'D_esoil'), 
     DiffEq = lambda Var, Par: DiffEq__D_csoil(Var, Par), 
     vLin = lambda Par: vLin__D_csoil(Par),
     units='PgC Mha-1', 
     core_dims=['reg_land', 'bio_land'])
 
 def DiffEq__D_csoil(Var, Par):
-    return Var.D_ffall + (Var.D_fcwd - Var.D_ecwd) - Var.D_esoil
+    return Var.D_ffall + (Var.D_fcwd_loss - Var.D_ecwd) - Var.D_esoil
 
 def vLin__D_csoil(Par):
     return Par.v_resp

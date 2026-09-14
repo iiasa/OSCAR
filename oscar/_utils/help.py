@@ -102,11 +102,9 @@ def _print_configured(cfg_full):
     # --- Output Variables & Core Metadata Lookup ---
     var_meta = load_var_registry()
     v_core = reg.get("v_core", [])
-    v_all = cfg_full.get("v_all", [])
-    total_vars = len(v_all)
 
-    print(f"  {'Output Vars':<12} : {total_vars} available")
-    print(f"  {'':<15}(Full list in {var_path})")
+
+    print(f"  {'Output Vars':<12} : Full list in {var_path}")
     print(f"{'':<17}[ Core Variables: ]")
 
     for var in v_core:

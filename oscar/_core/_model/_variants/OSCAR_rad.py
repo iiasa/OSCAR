@@ -35,9 +35,23 @@ OSCAR_rad.process(
     units = '1')
 
 def Eq__r_npp(Var, Par):
-    fct_Tl = safe_exp(Par.g_npp_T2 * 2 * Par.D_Topt_npp * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * Var.D_Tl**2)
+    fct_Tl = safe_exp(Par.g_npp_T * Var.D_Tl, 100) * np.exp(-Par.g_npp_T2 * np.maximum(Var.D_Tl, 0)**2)
     fct_Pl = safe_exp(Par.x_npp_P * np.log(Var.r_Pl), 100)
     return safe_ratio(fct_Tl * fct_Pl)
+
+
+## relative change in wildfire rate
+OSCAR_rad.process(
+    Out = 'r_vfire', 
+    In = ('r_npp', 'D_Tl', 'r_Pl'), 
+    Eq = lambda Var, Par: Eq__r_vfire(Var, Par), 
+    units = '1')
+
+def Eq__r_vfire(Var, Par):
+    fct_npp = safe_exp(Par.x_fire_npp * np.log(Var.r_npp), f_max(Par.v_fire))
+    fct_Tl = safe_exp(Par.g_fire_T * Var.D_Tl, f_max(Par.v_fire))
+    fct_Pl = safe_exp(Par.g_fire_P * Par.Pl_pi * (Var.r_Pl - 1), f_max(Par.v_fire))
+    return fct_npp * fct_Tl * fct_Pl
 
 
 ## wetland areal emissions

@@ -28,7 +28,11 @@ def get_params(mod_region, **useless):
     Par = Par.rename({'Tl_piL': 'Tl_pi', 'Pl_piL': 'Pl_pi'})
 
     ## set zero fire in Cropland and Urban biomes
-    Par['v_fire'].loc[{'bio_land': ['Cropland', 'Urban']}] = 0.
+    Par['v_fire_piL'].loc[{'bio_land': ['Cropland', 'Urban']}] = 0.
+
+    ## assume no change in v_mort and v_resp
+    ## note: because only direct CO2 factors are considered to re-align preindustrial
+    Par = Par.rename({'v_mort_piL': 'v_mort', 'v_resp_piL': 'v_resp'})
 
     ## additional uncertainty factor
     ## note: to span a broader range than TRENDY models
@@ -70,12 +74,22 @@ def get_params(mod_region, **useless):
     Par['p_cwd_resp'] = xr.DataArray([[[0.6, 0.1] for _ in range(len(Par.bio_land))] for _ in range(len(Par.reg_land))], dims=['reg_land', 'bio_land', 'unc_LogitNorm'], attrs={'units': '1'})
 
 
+    '''
     ## fraction of npp going to woody biomass
     ## (Xia et al., 2019; https://doi.org/10.1029/2018JG004777) (Figure 2)
     ## (Lu et al., 2025; https://doi.org/10.1111/jbi.15094) (Supplementary Information)
     ## (Malhi et al.https://doi.org/10.1098/rstb.2011.0062) (Abstract)
     ## note: rounded value, uncertainty from third study
-    Par['p_npp_wood'] = xr.DataArray([[[0.4, 0.1] for _ in range(len(Par.bio_land))] for _ in range(len(Par.reg_land))], dims=['reg_land', 'bio_land', 'unc_LogitNorm'], attrs={'units': '1'})
+    Par['p_npp_wood'] = xr.DataArray([0.4, 0.1], dims=['unc_LogitNorm'], attrs={'units': '1'})
+    '''
+
+    ## turnover time of woody biomass for CWD production
+    ## (Yu et al., 2023; https://doi.org/10.1111/geb.13736) [63-99 yr] (raw data, not ML extrapolation)
+    ## (Xue et al., 2017; https://doi.org/10.1002/2016GB005557) [67; 56-104 yr] (using productivity)
+    ## (Galbraith et al., 2013; https://doi.org/10.1080/17550874.2013.770578) [50; 23-129 yr] (tropics, using productivity)
+    ## (Lewis et al., 2004; https://doi.org/10.1111/j.0022-0477.2004.00923.x) [55 yr] (tropics, stem demographics)
+    ## note: arbitrary but informed by above refs, can be changed to adjust CWD pool
+    Par['t_wood'] = xr.DataArray([55., 20.], dims=['unc_LogNorm'], attrs={'units': 'yr'})
 
 
     ## RETURN

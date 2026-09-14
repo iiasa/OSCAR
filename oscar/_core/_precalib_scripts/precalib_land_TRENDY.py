@@ -141,14 +141,14 @@ def precalib_params(mod_region, no_warnings=True):
 
         ## core carbon cycle
         Par['npp_piL'] = get_pi(ds_pft.npp_pft) / get_pi(ds_pft.area_pft)
-        Par['v_mort'] = get_pi(ds_pft.fMort_pft) / get_pi(ds_pft.cVeg_pft)
-        Par['v_resp'] = get_pi(ds_pft.rh_pft) / (get_pi(ds_pft.cLitter_pft).fillna(0.) + get_pi(ds_pft.cSoil_pft))
+        Par['v_mort_piL'] = get_pi(ds_pft.fMort_pft) / get_pi(ds_pft.cVeg_pft)
+        Par['v_resp_piL'] = get_pi(ds_pft.rh_pft) / (get_pi(ds_pft.cLitter_pft).fillna(0.) + get_pi(ds_pft.cSoil_pft))
         Par = Par.sel(model=Par.model[~ds_pft.cSoil_pft.isnull().all(['year', 'reg_land', 'bio_land', 'exp'])]).rename({'model': 'mod_Cland'})
-        not_null = Par['npp_piL'].notnull() & Par['v_mort'].notnull() & Par['v_resp'].notnull()
-        for var in ['npp_piL', 'v_mort', 'v_resp']: Par[var] = Par[var].where(not_null, 0.)
+        not_null = Par['npp_piL'].notnull() & Par['v_mort_piL'].notnull() & Par['v_resp_piL'].notnull()
+        for var in ['npp_piL', 'v_mort_piL', 'v_resp_piL']: Par[var] = Par[var].where(not_null, 0.)
 
         ## fire disturbance
-        Par['v_fire'] = (get_pi(ds_pft.fFire_pft) / get_pi(ds_pft.cVeg_pft)).rename({'model': 'mod_Efire'}).dropna('mod_Efire', how='all').fillna(0.)
+        Par['v_fire_piL'] = (get_pi(ds_pft.fFire_pft) / get_pi(ds_pft.cVeg_pft)).rename({'model': 'mod_Efire'}).dropna('mod_Efire', how='all').fillna(0.)
 
         ## anthropogenic disturbances        
         Par['p_charv'] = (get_pi(ds_pft.fHarvest_pft) / get_pi(ds_pft.npp_pft)).rename({'model': 'mod_Echarv'}).dropna('mod_Echarv', how='all').fillna(0.)
@@ -160,9 +160,9 @@ def precalib_params(mod_region, no_warnings=True):
         ds_fit = ds_pft - ds_pft.sel(exp='S0', drop=True) + get_pi(ds_pft)
         ## fit variables
         ds_fit['r_npp'] = ds_fit.npp_pft / ds_fit.area_pft / Par.npp_piL.rename({'mod_Cland': 'model'})
-        ds_fit['r_vFire'] = ds_fit.fFire_pft / ds_fit.cVeg_pft / Par.v_fire.rename({'mod_Efire': 'model'})
-        ds_fit['r_vMort'] = ds_fit.fMort_pft / ds_fit.cVeg_pft / Par.v_mort.rename({'mod_Cland': 'model'})
-        ds_fit['r_vResp'] = ds_fit.rh_pft / (ds_fit.cLitter_pft.fillna(0.) + ds_fit.cSoil_pft) / Par.v_resp.rename({'mod_Cland': 'model'})
+        ds_fit['r_vFire'] = ds_fit.fFire_pft / ds_fit.cVeg_pft / Par.v_fire_piL.rename({'mod_Efire': 'model'})
+        ds_fit['r_vMort'] = ds_fit.fMort_pft / ds_fit.cVeg_pft / Par.v_mort_piL.rename({'mod_Cland': 'model'})
+        ds_fit['r_vResp'] = ds_fit.rh_pft / (ds_fit.cLitter_pft.fillna(0.) + ds_fit.cSoil_pft) / Par.v_resp_piL.rename({'mod_Cland': 'model'})
         ds_fit['r_lai'] = ds_fit.lai_pft / get_pi(ds_fit.lai_pft)
         ds_fit['r_fMort'] = ds_fit.fMort_pft / get_pi(ds_fit.fMort_pft)
         ## sanitizing
@@ -177,25 +177,25 @@ def precalib_params(mod_region, no_warnings=True):
         ## transient NPP
 
         ## initialization of parameters
-        for var in ['b_npp_CO2', 'x_npp_CO2', 'g_npp_T2', 'D_Topt_npp', 'x_npp_P']:
+        for var in ['b_npp_CO2', 'x_npp_CO2', 'g_npp_T', 'g_npp_T2', 'x_npp_P']:
             Par[var] = np.nan + sum([xr.zeros_like(Par[dim], dtype=np.float32) for dim in ['reg_land', 'bio_land', 'mod_Cland']])
 
         ## make function (CO2)
         def f_npp_co2(d_co2, co2_pi, bC, xC, pC):
             f_log = 1 + bC * np.log1p(d_co2 / co2_pi)
-            f_full = 1 + bC/xC * ((1 + d_co2 / co2_pi)**xC - 1) / (1 + pC * ((1 + d_co2 / co2_pi)**xC - 1))
+            f_full = 1 + bC/xC * ((1 + d_co2 / co2_pi)**xC - 1) / (1 + pC * ((1 + d_co2 / co2_pi)**xC - 1)) # used
             return f_log if xC==0 else f_full
 
         ## make function (clim)
-        def f_npp_clim(d_tas, d_pr, gT2, dTopt, pr_pi, xP):
-            f_tas = safe_exp(gT2 * 2 * dTopt * d_tas, 100) * np.exp(-gT2 * d_tas**2)
+        def f_npp_clim(d_tas, d_pr, dTopt, gT, e, pr_pi, xP):
+            f_tas = safe_exp(gT * d_tas, 100) * np.exp(-gT/2/dTopt * (1 + e) * np.maximum(d_tas, 0)**2)
             f_pr = safe_exp(xP * np.log(safe_ratio(1 + d_pr / pr_pi)), 100)
             return  f_tas * f_pr
 
         ## make function (full)
-        def f_npp(d_co2, d_tas, d_pr, co2_pi, bC, xC, pC, gT2, dTopt, pr_pi, xP):
+        def f_npp(d_co2, d_tas, d_pr, co2_pi, bC, xC, pC, dTopt, gT, e, pr_pi, xP):
             f_co2 = f_npp_co2(d_co2, co2_pi, bC, xC, pC)
-            f_clim = f_npp_clim(d_tas, d_pr, gT2, dTopt, pr_pi, xP)
+            f_clim = f_npp_clim(d_tas, d_pr, tas_pi, gT, gT2, pr_pi, xP)
             return  f_co2 * f_clim
 
         ## loop on models and regions
@@ -216,10 +216,10 @@ def precalib_params(mod_region, no_warnings=True):
                             'bC': dict(value=0.65, min=0, default=0),
                             'xC': dict(value=-1, max=1, default=1),
                             'pC': dict(value=0, vary=False)}
-                        params2_npp_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
-                            'bC': dict(value=0.65, min=0, default=0),
-                            'xC': dict(value=1, min=0, default=1),
-                            'pC': dict(value=0.1, min=0, max=1, default=0)}
+                        #params2_npp_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
+                        #    'bC': dict(value=0.65, min=0, default=0),
+                        #    'xC': dict(value=1, min=0, default=1),
+                        #    'pC': dict(value=0.1, min=0, max=1, default=0)}
 
                         ## select data (CO2)
                         xdata = ds_tmp.d_co2.sel(exp='S1', drop=True).to_dataset(name='d_co2')
@@ -237,29 +237,56 @@ def precalib_params(mod_region, no_warnings=True):
 
                         ## STEP 2b
                         ## make parameters
+                        dTopt_max = 30 - (Par.Tl_piL.sel(reg_land=reg).values - 273.15)
                         params1_npp_clim = {
-                            'gT2': dict(value=0.01, min=0, default=0), 
-                            'dTopt': dict(value=0, min=0-(Par.Tl_piL.sel(reg_land=reg).values-273.15), max=30-(Par.Tl_piL.sel(reg_land=reg).values-273.15), default=0), 
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=-0.1, max=0, default=0), 
+                            'e': dict(value=-1, vary=False), 
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=0.5, min=0, default=0)}
                         params2_npp_clim = {
-                            'gT2': dict(value=0.01, min=0, default=0), 
-                            'dTopt': dict(value=0, min=0-(Par.Tl_piL.sel(reg_land=reg).values-273.15), max=30-(Par.Tl_piL.sel(reg_land=reg).values-273.15), default=0), 
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=-0.1, max=0, default=0), 
+                            'e': dict(value=-1, vary=False), 
+                            'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
+                            'xP': dict(value=0, vary=False)}
+                        params3_npp_clim = {
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=0.1, min=0, default=0), 
+                            'e': dict(value=0, vary=False), 
+                            'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
+                            'xP': dict(value=0.5, min=0, default=0)}
+                        params4_npp_clim = {
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=0.1, min=0, default=0), 
+                            'e': dict(value=0, vary=False), 
+                            'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
+                            'xP': dict(value=0, vary=False)}
+                        params5_npp_clim = {
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=0.1, min=0, default=0), 
+                            'e': dict(value=1, min=0, default=0),  
+                            'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
+                            'xP': dict(value=0.5, min=0, default=0)}
+                        params6_npp_clim = {
+                            'dTopt': dict(value=dTopt_max, vary=False),
+                            'gT': dict(value=0.1, min=0, default=0), 
+                            'e': dict(value=1, min=0, default=0),  
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=0, vary=False)}
 
                         ## select data
-                        xdata = ds_tmp.drop_vars(['r_npp', 'd_co2']).sel(exp='S2')
-                        ydata = ds_tmp.r_npp.sel(exp='S2') / ds_tmp.r_npp.sel(exp='S1')
+                        xdata = ds_tmp.drop_vars(['r_npp', 'd_co2']).sel(exp='S2', drop=True)
+                        ydata = ds_tmp.r_npp.sel(exp='S2', drop=True) / ds_tmp.r_npp.sel(exp='S1', drop=True)
 
                         ## fit
-                        params_fit = get_best_fit(xdata, ydata, [f_npp_clim], [params1_npp_clim, params2_npp_clim], 
+                        params_fit = get_best_fit(xdata, ydata, [f_npp_clim], [params1_npp_clim, params2_npp_clim] + bool(dTopt_max > 0) * [params3_npp_clim, params4_npp_clim, params5_npp_clim, params6_npp_clim], 
                             select_crit='BIC', test_BIC1=True, 
                             print_report=False, file_name=name + f'__{mod_region}/npp_clim_{mod}_{reg}_{bio}')
 
                         ## assign parameters
-                        Par['g_npp_T2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = params_fit['gT2']
-                        Par['D_Topt_npp'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = params_fit['dTopt']
+                        Par['g_npp_T'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = params_fit['gT']
+                        Par['g_npp_T2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = params_fit['gT'] / 2 / dTopt_max * (1 +  params_fit['e'])
                         Par['x_npp_P'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = params_fit['xP']
 
                     ## or assign default values
@@ -267,8 +294,8 @@ def precalib_params(mod_region, no_warnings=True):
                         Par['b_npp_CO2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
                         Par['x_npp_CO2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 1.
                         #Par['b_npp_sat'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
+                        Par['g_npp_T'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
                         Par['g_npp_T2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
-                        Par['D_Topt_npp'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
                         Par['x_npp_P'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Cland': mod}] = 0.
 
 
@@ -276,14 +303,15 @@ def precalib_params(mod_region, no_warnings=True):
         ## transient Fire
 
         ## initialization of parameters
-        for var in ['x_fire_npp', 'x_fire_npp2', 'g_fire_T', 'g_fire_P']:
+        for var in ['x_fire_npp', 'x_fire_CO2', 'g_fire_T', 'g_fire_P']:
             Par[var] = np.nan + sum([xr.zeros_like(Par[dim], dtype=np.float32) for dim in ['reg_land', 'bio_land', 'mod_Efire']])
 
         ## make function (CO2)
-        def f_fire_co2(r_npp, x, x2, v):
+        def f_fire_co2(r_npp, d_co2, co2_pi, x, x2, xC, v):
             f_npp = safe_exp(x * np.log(safe_ratio(r_npp)), f_max(v))
-            f_npp2 = safe_exp(x2 * np.log(safe_ratio(r_npp))**2, f_max(v))
-            return f_npp * f_npp2
+            f_npp2 = safe_exp(x2 * np.log(safe_ratio(r_npp))**2, f_max(v)) # not used
+            f_co2 = safe_exp(xC * np.log1p(d_co2 / co2_pi), f_max(v))
+            return f_npp * f_npp2 * f_co2
 
         ## make function (clim)
         def f_fire_clim(d_tas, d_pr, gT, gP, v):
@@ -292,8 +320,8 @@ def precalib_params(mod_region, no_warnings=True):
             return  f_tas * f_pr
 
         ## make function (full)
-        def f_fire(r_npp, d_tas, d_pr, x, x2, gT, gP, v):
-            f_co2 = f_fire_co2(r_npp, x, x2, v)
+        def f_fire(r_npp, d_co2, d_tas, d_pr, co2_pi, x, x2, xC, gT, gP, v):
+            f_co2 = f_fire_co2(r_npp, d_co2, co2_pi, x, x2, xC, v)
             f_tas = f_fire_clim(d_tas, d_pr, gT, gP, v)
             return  f_co2 * f_clim
 
@@ -304,45 +332,60 @@ def precalib_params(mod_region, no_warnings=True):
                     print('\n', 'fire', mod, reg, bio, '\n')
 
                     ## sub dataset and ignore empty regions
-                    ds_tmp = ds_fit.drop_vars([var for var in ds_fit if var not in ['r_vFire', 'r_npp', 'd_tas', 'd_pr']])
+                    ds_tmp = ds_fit.drop_vars([var for var in ds_fit if var not in ['r_vFire', 'r_npp', 'd_co2', 'd_tas', 'd_pr']])
                     ds_tmp = ds_tmp.sel(reg_land=reg, bio_land=bio, model=mod).dropna('year', how='any')
                     ds_tmp = ds_tmp.sel(year=slice(year_start_fit, None))
                     if len(ds_tmp.year) >= min_years:
 
                         ## STEP 3a
                         ## make parameters (CO2)
-                        params1_fire_co2 = {'x': dict(value=0, default=0),
-                            'x2': dict(value=-0.01, max=0, default=0),
-                            'v': dict(value=Par.v_fire.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
-                        params2_fire_co2 = {'x': dict(value=0, default=0),
+                        #params1_fire_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
+                        #    'x': dict(value=0.1, min=0, default=0),
+                        #    'x2': dict(value=-0.01, max=0, default=0),
+                        #    'xC': dict(value=0, vary=False),
+                        #    'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                        params2_fire_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
+                            'x': dict(value=0.1, min=0, default=0),
                             'x2': dict(value=0, vary=False),
-                            'v': dict(value=Par.v_fire.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'xC': dict(value=-0.1, max=0, default=0),
+                            'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                        params3_fire_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
+                            'x': dict(value=0, vary=False),
+                            'x2': dict(value=0, vary=False),
+                            'xC': dict(value=-0.1, max=0, default=0),
+                            'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                        params4_fire_co2 = {'co2_pi': dict(value=Par.CO2_piL.values, vary=False),
+                            'x': dict(value=0.1, min=0, default=0),
+                            'x2': dict(value=0, vary=False),
+                            'xC': dict(value=0, vary=False),
+                            'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data (CO2)
-                        xdata = ds_tmp.r_npp.sel(exp='S1', drop=True).to_dataset(name='r_npp')
+                        xdata = ds_tmp.drop_vars(['r_vFire', 'd_tas', 'd_pr']).sel(exp='S1', drop=True)
                         ydata = ds_tmp.r_vFire.sel(exp='S1', drop=True)
 
                         ## fit (CO2)
-                        params_fit = get_best_fit(xdata, ydata, [f_fire_co2], [params1_fire_co2, params2_fire_co2], 
+                        params_fit = get_best_fit(xdata, ydata, [f_fire_co2], [params2_fire_co2, params3_fire_co2, params4_fire_co2], 
                             select_crit='BIC', test_BIC1=True, 
                             print_report=False, file_name=name + f'__{mod_region}/fire_co2_{mod}_{reg}_{bio}')
 
                         ## assign parameters
                         Par['x_fire_npp'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = params_fit['x']
-                        Par['x_fire_npp2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = params_fit['x2']
+                        #Par['x_fire_npp2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = params_fit['x2']
+                        Par['x_fire_CO2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = params_fit['xC']
 
                         ## STEP 3b
                         ## make parameters
                         params1_fire_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'gP': dict(value=-0.1, max=0, default=0),
-                            'v': dict(value=Par.v_fire.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
                         params2_fire_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'gP': dict(value=0, vary=False),
-                            'v': dict(value=Par.v_fire.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_fire_piL.sel(mod_Efire=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data
-                        xdata = ds_tmp.drop_vars(['r_vFire', 'r_npp']).sel(exp='S2')
-                        ydata = ds_tmp.r_vFire.sel(exp='S2') / ds_tmp.r_vFire.sel(exp='S1')
+                        xdata = ds_tmp.drop_vars(['r_vFire', 'r_npp', 'd_co2']).sel(exp='S2', drop=True)
+                        ydata = ds_tmp.r_vFire.sel(exp='S2', drop=True) / ds_tmp.r_vFire.sel(exp='S1', drop=True)
 
                         ## fit
                         params_fit = get_best_fit(xdata, ydata, [f_fire_clim], [params1_fire_clim, params2_fire_clim], 
@@ -356,7 +399,8 @@ def precalib_params(mod_region, no_warnings=True):
                     ## or assign default values
                     else:
                         Par['x_fire_npp'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
-                        Par['x_fire_npp2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
+                        #Par['x_fire_npp2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
+                        Par['x_fire_CO2'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
                         Par['g_fire_T'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
                         Par['g_fire_P'].loc[{'reg_land': reg, 'bio_land': bio, 'mod_Efire': mod}] = 0.
 
@@ -371,7 +415,7 @@ def precalib_params(mod_region, no_warnings=True):
         ## make function (CO2)
         def f_mort_co2(r_npp, x, x2, v):
             f_npp = safe_exp(x * np.log(safe_ratio(r_npp)), f_max(v))
-            f_npp2 = safe_exp(x2 * np.log(safe_ratio(r_npp))**2, f_max(v))
+            f_npp2 = safe_exp(x2 * np.log(safe_ratio(r_npp))**2, f_max(v)) # not used
             return f_npp * f_npp2
 
         ## make function (clim)
@@ -400,12 +444,12 @@ def precalib_params(mod_region, no_warnings=True):
 
                         ## STEP 4a
                         ## make parameters (CO2)
-                        params1_mort_co2 = {'x': dict(value=0, default=0),
-                            'x2': dict(value=-0.01, max=0, default=0),
-                            'v': dict(value=Par.v_mort.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
-                        params2_mort_co2 = {'x': dict(value=0, default=0),
+                        #params1_mort_co2 = {'x': dict(value=0, min=0, default=0),
+                        #    'x2': dict(value=-0.01, max=0, default=0),
+                        #    'v': dict(value=Par.v_mort_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                        params2_mort_co2 = {'x': dict(value=0, min=-1, default=0),
                             'x2': dict(value=0, vary=False),
-                            'v': dict(value=Par.v_mort.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_mort_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data (CO2)
                         xdata = ds_tmp.r_npp.sel(exp='S1', drop=True).to_dataset(name='r_npp')
@@ -425,15 +469,15 @@ def precalib_params(mod_region, no_warnings=True):
                         params1_mort_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=-0.1, max=0, default=0),
-                            'v': dict(value=Par.v_mort.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_mort_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
                         params2_mort_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=0, vary=False),
-                            'v': dict(value=Par.v_mort.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_mort_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data
-                        xdata = ds_tmp.drop_vars(['r_vMort', 'r_npp']).sel(exp='S2')
-                        ydata = ds_tmp.r_vMort.sel(exp='S2') / ds_tmp.r_vMort.sel(exp='S1')
+                        xdata = ds_tmp.drop_vars(['r_vMort', 'r_npp']).sel(exp='S2', drop=True)
+                        ydata = ds_tmp.r_vMort.sel(exp='S2', drop=True) / ds_tmp.r_vMort.sel(exp='S1', drop=True)
 
                         ## fit
                         params_fit = get_best_fit(xdata, ydata, [f_mort_clim], [params1_mort_clim, params2_mort_clim], 
@@ -490,7 +534,7 @@ def precalib_params(mod_region, no_warnings=True):
                         ## STEP 5a
                         ## make parameters (CO2)
                         params_resp_co2 = {'x': dict(value=0.1, min=0, max=1, default=0),
-                            'v': dict(value=Par.v_resp.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_resp_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data (CO2)
                         xdata = ds_tmp.r_fMort.sel(exp='S1', drop=True).to_dataset(name='r_in')
@@ -509,15 +553,15 @@ def precalib_params(mod_region, no_warnings=True):
                         params1_resp_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=0.1, default=0),
-                            'v': dict(value=Par.v_resp.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_resp_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
                         params2_resp_clim = {'gT': dict(value=0.1, min=0, default=0), 
                             'pr_pi': dict(value=Par.Pl_piL.sel(reg_land=reg).values, vary=False),
                             'xP': dict(value=0, vary=False),
-                            'v': dict(value=Par.v_resp.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
+                            'v': dict(value=Par.v_resp_piL.sel(mod_Cland=mod, reg_land=reg, bio_land=bio).values, vary=False)}
 
                         ## select data
-                        xdata = ds_tmp.drop_vars(['r_vResp', 'r_fMort']).sel(exp='S2')
-                        ydata = ds_tmp.r_vResp.sel(exp='S2') / ds_tmp.r_vResp.sel(exp='S1')
+                        xdata = ds_tmp.drop_vars(['r_vResp', 'r_fMort']).sel(exp='S2', drop=True)
+                        ydata = ds_tmp.r_vResp.sel(exp='S2', drop=True) / ds_tmp.r_vResp.sel(exp='S1', drop=True)
 
                         ## fit
                         params_fit = get_best_fit(xdata, ydata, [f_resp_clim], [params1_resp_clim, params2_resp_clim], 
@@ -540,17 +584,19 @@ def precalib_params(mod_region, no_warnings=True):
         Par['Tl_piL'].attrs['units'] = 'K'
         Par['Pl_piL'].attrs['units'] = 'mm yr-1'
         Par['npp_piL'].attrs['units'] = 'PgC Mha-1 yr-1'
-        for var in ['v_mort', 'v_resp', 'v_fire']:
+        for var in ['v_mort_piL', 'v_resp_piL', 'v_fire_piL']:
             Par[var].attrs['units'] = 'yr-1'
         for var in ['p_charv', 'p_graz']:
             Par[var].attrs['units'] = '1'
-        for var in ['b_npp_CO2', 'x_npp_CO2', 'x_fire_npp', 'x_fire_npp2', 'x_mort_npp', 'x_resp_fall', 'x_npp_P', 'x_mort_P', 'x_resp_P']:
+        for var in ['b_npp_CO2', 'x_npp_CO2', 'x_npp_P', 'x_fire_npp', 'x_fire_CO2', 'x_mort_npp', 'x_mort_P', 'x_resp_fall', 'x_resp_P']:
             Par[var].attrs['units'] = '1'
-        for var in ['g_fire_T', 'g_mort_T', 'g_resp_T']:
+        for var in ['g_npp_T', 'g_fire_T', 'g_mort_T', 'g_resp_T']:
             Par[var].attrs['units'] = 'K-1'
         Par['g_npp_T2'].attrs['units'] = 'K-2'
-        Par['D_Topt_npp'].attrs['units'] = 'K'
         Par['g_fire_P'].attrs['units'] = 'yr mm-1'
+        if 'b_npp_sat' in Par: Par['b_npp_sat'].attrs['units'] = '1'
+        if 'x_fire_npp2' in Par: Par['x_fire_npp2'].attrs['units'] = '1'
+        if 'x_mort_npp2' in Par: Par['x_mort_npp2'].attrs['units'] = '1'
 
         ## print remaining NaN for info
         for var in Par:

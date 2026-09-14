@@ -56,15 +56,45 @@ def Eq__p_slash(Par):
     return 1 - Par.p_hwp.sum('box_hwp', min_count=1)
 
 
-## factor for mortality rate assuming regrowth dominated by woody biomass
+## non-woody biomass turnover rate
+## note: obtained through steady-state mass balance
 OSCAR_landC_bk.process(
-    Out = 'a_mort_regr', 
-    Eq = lambda Par: Eq__a_mort_regr(Par), 
-    units='1')
+    Out = 'v_nonwood', 
+    Eq = lambda Par: Eq__v_nonwood(Par), 
+    units = 'yr-1')
 
-def Eq__a_mort_regr(Par):
-    if 'p2_npp_wood' not in Par: return None
-    return Par.p2_npp_wood.where(Par.p2_npp_wood != 0, 1.) * Par.p_wood + 1. * (1 - Par.p_wood)
+def Eq__v_nonwood(Par):
+    if 'v_mort' not in Par: return None
+    if 'v_fire' not in Par: return None
+    return (Par.v_mort + Par.v_fire - Par.p_wood / Par.t_wood) / (1 - Par.p_wood)
+
+
+## biospheric regrowth timescale
+## note: weighted between fast (non-woody) and slow (woody)
+OSCAR_landC_bk.process(
+    Out = 't_regrow', 
+    Eq = lambda Par: Eq__t_regrow(Par), 
+    units='yr')
+
+def Eq__t_regrow(Par):
+    if 'v_nonwood' not in Par: return None
+    return (1 - Par.p_wood) / Par.v_nonwood + Par.p_wood * Par.t_wood
+
+
+## actual biospheric regrowth timescale (used in the module)
+## note: convenient parameter to adjust regrowth timescale
+OSCAR_landC_bk.process(
+    Out = 't2_regrow', 
+    Eq = lambda Par: Eq__t2_regrow(Par), 
+    units='yr')
+
+def Eq__t2_regrow(Par):
+    if 'v_mort' not in Par: return None
+    if 'v_fire' not in Par: return None
+    if 't_regrow' not in Par: return None
+    t_nat = Par.t_regrow.sel(bio_land=['Forest', 'Non-Forest'])
+    t_ant = (1 / (Par.v_mort + Par.v_fire)).sel(bio_land=[bio for bio in Par.bio_land.values if bio not in ['Forest', 'Non-Forest']])
+    return xr.concat([t_nat, t_ant], dim='bio_land')
 
 
 ## fraction of biomass growth reached under shifting cultivation
@@ -74,10 +104,8 @@ OSCAR_landC_bk.process(
     units='1')
 
 def Eq__p_cveg_shift(Par):
-    if 'v_mort' not in Par: return None
-    if 'v_fire' not in Par: return None
-    if 'a_mort_regr' not in Par: return None
-    return 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.t_shift)
+    if 't2_regrow' not in Par: return None
+    return 1 - np.exp(-Par.t_shift / Par.t2_regrow)
 
 
 ## PREINDUSTRIAL STEADY-STATE
@@ -89,20 +117,18 @@ OSCAR_landC_bk.process(
     units='PgC')
 
 def Eq__Cveg_bk_pi(Par):
-    if 'v_mort' not in Par: return None
-    if 'v_fire' not in Par: return None
     if 'cveg_pi' not in Par: return None
-    if 'a_mort_regr' not in Par: return None
+    if 't2_regrow' not in Par: return None
     if 'p_cveg_shift' not in Par: return None
     ## age effect
-    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-Par.age_bk_pi / Par.t2_regrow)
     ## wood harvest
     dCveg_bk_pi_wharv = -Par.cveg_pi * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
     dCveg_bk_pi_shift = -Par.cveg_pi * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCveg_bk_pi = dCveg_bk_pi_wharv + dCveg_bk_pi_shift
-    return (dCveg_bk_pi / (Par.a_mort_regr * Par.v_mort + Par.v_fire)).where((Par.a_mort_regr * Par.v_mort + Par.v_fire) != 0, 0.)
+    return dCveg_bk_pi * Par.t2_regrow
 
 
 ## preindustrial bookkeeping imbalance of coarse woody debris pool
@@ -112,23 +138,20 @@ OSCAR_landC_bk.process(
     units='PgC')
 
 def Eq__Ccwd_bk_pi(Par):
-    if 'p2_npp_wood' not in Par: return None
     if 'cveg_pi' not in Par: return None
-    if 'v_mort' not in Par: return None
     if 'v_cwd' not in Par: return None
     if 'p_slash' not in Par: return None
-    if 'age_bk_pi' not in Par: return None
     if 'p_cveg_shift' not in Par: return None
     if 'Cveg_bk_pi' not in Par: return None
     ## age effect
-    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-Par.age_bk_pi / Par.t2_regrow)
     ## wood harvest
     dCcwd_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_slash * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
     dCcwd_bk_pi_shift = Par.cveg_pi * Par.p_wood * Par.p_slash * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCcwd_bk_pi = dCcwd_bk_pi_wharv + dCcwd_bk_pi_shift
-    return ((Par.p2_npp_wood * Par.v_mort * Par.Cveg_bk_pi + dCcwd_bk_pi) / Par.v_cwd).where(Par.v_cwd != 0, 0.)
+    return ((Par.p_wood / Par.t_wood * Par.Cveg_bk_pi + dCcwd_bk_pi) / Par.v_cwd).where(Par.v_cwd != 0, 0.)
 
 
 ## preindustrial bookkeeping imbalance of soil pool
@@ -138,9 +161,7 @@ OSCAR_landC_bk.process(
     units='PgC')
 
 def Eq__Csoil_bk_pi(Par):
-    if 'p2_npp_wood' not in Par: return None
     if 'cveg_pi' not in Par: return None
-    if 'v_mort' not in Par: return None
     if 'v_cwd' not in Par: return None
     if 'v_resp' not in Par: return None
     if 'p_soft' not in Par: return None
@@ -148,14 +169,14 @@ def Eq__Csoil_bk_pi(Par):
     if 'Cveg_bk_pi' not in Par: return None
     if 'Ccwd_bk_pi' not in Par: return None
     ## age effect
-    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-Par.age_bk_pi / Par.t2_regrow)
     ## wood harvest
     dCsoil_bk_pi_wharv = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
     dCsoil_bk_pi_shift = Par.cveg_pi * (Par.p_leaf + Par.p_soft + Par.p_root) * Par.p_cveg_shift * Par.dA_shift_pi.sum('bio_from', min_count=1).rename({'bio_to':'bio_land'})
     ## all
     dCsoil_bk_pi = dCsoil_bk_pi_wharv + dCsoil_bk_pi_shift
-    return (((1 - Par.p2_npp_wood) * Par.v_mort * Par.Cveg_bk_pi + (1 - Par.p_cwd_resp) * Par.v_cwd * Par.Ccwd_bk_pi + dCsoil_bk_pi) / Par.v_resp).where(Par.v_resp != 0, 0.)
+    return (((1/Par.t2_regrow - Par.p_wood / Par.t_wood) * Par.Cveg_bk_pi + (1 - Par.p_cwd_resp) * Par.v_cwd * Par.Ccwd_bk_pi + dCsoil_bk_pi) / Par.v_resp).where(Par.v_resp != 0, 0.)
 
 
 ## preindustrial bookkeeping imbalance of harvested wood products pool
@@ -170,7 +191,7 @@ def Eq__Chwp_bk_pi(Par):
     if 'age_bk_pi' not in Par: return None
     if 'p_cveg_shift' not in Par: return None
     ## age effect
-    p_cveg_age = 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * Par.age_bk_pi)
+    p_cveg_age = 1 - np.exp(-Par.age_bk_pi / Par.t2_regrow)
     ## wood harvest
     dChwp_bk_pi_wharv = Par.cveg_pi * Par.p_wood * Par.p_hwp * p_cveg_age * Par.dA_wharv_pi
     ## shifting cultivation
@@ -194,7 +215,7 @@ OSCAR_landC_bk.process(
     units='1')
 
 def Eq__p_cveg_age(Var, Par):
-    return 1 - np.exp(-(Par.a_mort_regr * Par.v_mort + Par.v_fire) * (Par.age_bk_pi + Var.D_age_bk))
+    return 1 - np.exp(-(Par.age_bk_pi + Var.D_age_bk) / Par.t2_regrow)
 
 
 ## bookkeeping initialization of vegetation
@@ -385,7 +406,7 @@ def Eq__D_Efire_bk(Var, Par):
 
 
 ## total mortality flux (under bookkeeping)
-## note: assumes regrowth time dominated by woody biomass
+## note: assumes regrowth rate instead of mortality rate
 OSCAR_landC_bk.process(
     Out = 'D_Fmort_bk', 
     In = ('r_vmort', 'D_Cveg_bk'), 
@@ -393,40 +414,51 @@ OSCAR_landC_bk.process(
     units = 'PgC yr-1')
 
 def Eq__D_Fmort_bk(Var, Par):
-    return Par.a_mort_regr * Par.v_mort * Var.r_vmort * Var.D_Cveg_bk
+    return 1/Par.t2_regrow * Var.r_vmort * Var.D_Cveg_bk
+
+
+## coarse woody debris production flux (under bookkeeping)
+OSCAR_landC_bk.process(
+    Out = 'D_Fcwd_prod_bk', 
+    In = ('D_Cveg_bk',), 
+    Eq = lambda Var, Par: Eq__D_Fcwd_prod_bk(Var, Par), 
+    units='PgC Mha-1 yr-1')
+
+def Eq__D_Fcwd_prod_bk(Var, Par):
+    return 1/Par.t_wood * Par.p_wood * Var.D_Cveg_bk
 
 
 ## litterfall flux (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Ffall_bk', 
-    In = ('D_Fmort_bk',), 
+    In = ('D_Fmort_bk', 'D_Fcwd_prod_bk'), 
     Eq = lambda Var, Par: Eq__D_Ffall_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Ffall_bk(Var, Par):
-    return (1 - Par.p2_npp_wood) * Var.D_Fmort_bk
+    return Var.D_Fmort_bk - Var.D_Fcwd_prod_bk
 
 
-## coarse woody debris decay flux (under bookkeeping)
+## coarse woody debris loss flux (under bookkeeping)
 OSCAR_landC_bk.process(
-    Out = 'D_Fcwd_bk', 
+    Out = 'D_Fcwd_loss_bk', 
     In = ('r_vcwd', 'D_Ccwd_bk'), 
-    Eq = lambda Var, Par: Eq__D_Fcwd_bk(Var, Par), 
+    Eq = lambda Var, Par: Eq__D_Fcwd_loss_bk(Var, Par), 
     units = 'PgC yr-1')
 
-def Eq__D_Fcwd_bk(Var, Par):
+def Eq__D_Fcwd_loss_bk(Var, Par):
     return Par.v_cwd * Var.r_vcwd * Var.D_Ccwd_bk
 
 
 ## coarse woody debris emissions (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Ecwd_bk', 
-    In = ('D_Fcwd_bk',), 
+    In = ('D_Fcwd_loss_bk',), 
     Eq = lambda Var, Par: Eq__D_Ecwd_bk(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__D_Ecwd_bk(Var, Par):
-    return Par.p_cwd_resp * Var.D_Fcwd_bk
+    return Par.p_cwd_resp * Var.D_Fcwd_loss_bk
 
 
 ## soil respiration (under bookkeeping)
@@ -480,7 +512,7 @@ def DiffEq__age_bk(Var, Par):
     ## wood harvest
     d_Abk_wharv2 = (Par.dA_wharv_pi + Var.D_dA_wharv2)
     ## all
-    return 1 - (Par.age_bk_pi + Var.D_age_bk) * (d_Abk_lcc2 + d_Abk_wharv2) / (Par.Aland_bk_pi + Var.D_Aland_bk)
+    return 1 - (Par.age_bk_pi + Var.D_age_bk) * ((d_Abk_lcc2 + d_Abk_wharv2) / (Par.Aland_bk_pi + Var.D_Aland_bk)).where((Par.Aland_bk_pi + Var.D_Aland_bk) != 0, 0.)
 
 
 ## land area under bookkeeping
@@ -520,14 +552,14 @@ def vLin__D_Cveg_bk(Par):
 ## coarse woody debris carbon stock (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Ccwd_bk', 
-    In = ('D_Ccwd_bk', 'D_Fbk_cwd2cwd', 'D_Fbk_veg2cwd', 'D_Fmort_bk', 'D_Ffall_bk', 'D_Fcwd_bk'), 
+    In = ('D_Ccwd_bk', 'D_Fbk_cwd2cwd', 'D_Fbk_veg2cwd', 'D_Fcwd_prod_bk', 'D_Fcwd_loss_bk'), 
     DiffEq = lambda Var, Par: DiffEq__D_Ccwd_bk(Var, Par), 
     vLin = lambda Par: vLin__D_Ccwd_bk(Par), 
     units = 'PgC', 
     core_dims = ['reg_land', 'bio_land'])
     
 def DiffEq__D_Ccwd_bk(Var, Par):
-    return Var.D_Fbk_cwd2cwd + Var.D_Fbk_veg2cwd + (Var.D_Fmort_bk - Var.D_Ffall_bk) - Var.D_Fcwd_bk
+    return Var.D_Fbk_cwd2cwd + Var.D_Fbk_veg2cwd + Var.D_Fcwd_prod_bk - Var.D_Fcwd_loss_bk
 
 def vLin__D_Ccwd_bk(Par):
     return Par.v_cwd
@@ -536,14 +568,14 @@ def vLin__D_Ccwd_bk(Par):
 ## soil carbon stock (under bookkeeping)
 OSCAR_landC_bk.process(
     Out = 'D_Csoil_bk', 
-    In = ('D_Csoil_bk', 'D_Fbk_soil2soil', 'D_Fbk_veg2litter', 'D_Fbk_veg2soil', 'D_Ffall_bk', 'D_Fcwd_bk', 'D_Ecwd_bk', 'D_Esoil_bk'), 
+    In = ('D_Csoil_bk', 'D_Fbk_soil2soil', 'D_Fbk_veg2litter', 'D_Fbk_veg2soil', 'D_Ffall_bk', 'D_Fcwd_loss_bk', 'D_Ecwd_bk', 'D_Esoil_bk'), 
     DiffEq = lambda Var, Par: DiffEq__D_Csoil_bk(Var, Par), 
     vLin = lambda Par: vLin__D_Csoil_bk(Par), 
     units = 'PgC', 
     core_dims = ['reg_land', 'bio_land'])
 
 def DiffEq__D_Csoil_bk(Var, Par):
-    return Var.D_Fbk_soil2soil + Var.D_Fbk_veg2litter + Var.D_Fbk_veg2soil + Var.D_Ffall_bk + (Var.D_Fcwd_bk - Var.D_Ecwd_bk) - Var.D_Esoil_bk
+    return Var.D_Fbk_soil2soil + Var.D_Fbk_veg2litter + Var.D_Fbk_veg2soil + Var.D_Ffall_bk + (Var.D_Fcwd_loss_bk - Var.D_Ecwd_bk) - Var.D_Esoil_bk
 
 def vLin__D_Csoil_bk(Par):
     return Par.v_resp

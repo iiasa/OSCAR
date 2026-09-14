@@ -16,8 +16,7 @@ oscar_data/**
 !oscar_data/library/core_data/
 !oscar_data/library/core_data/params_precalib/
 !oscar_data/library/core_data/params_precalib/**
-# slurm logs
-slurm_logs/
+
 
 # ==================================================
 

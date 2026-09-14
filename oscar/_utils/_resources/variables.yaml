@@ -95,6 +95,7 @@ variables:
   D_Fsink_CO2: {sci_name: "ΔFsink_CO2",  latex_name: '\Delta F_\mathrm{sink,CO_2}',  long_name: "Total CO2 uptake",                                    unit: "PgC yr-1"}
   D_Focean:    {sci_name: "ΔFocean",     latex_name: '\Delta F_\mathrm{ocean}',      long_name: "Net ocean carbon uptake flux",                        unit: "PgC yr-1"}
   D_Fland:     {sci_name: "ΔFland",      latex_name: '\Delta F_\mathrm{land}',       long_name: "Net land carbon uptake flux excluding permafrost",    unit: "PgC yr-1"}
+  D_Fland_pf:  {sci_name: "ΔFland+pf",   latex_name: '\Delta F_\mathrm{land+pf}',    long_name: "Net land carbon uptake flux including permafrost",    unit: "PgC yr-1"}
   D_Frss:      {sci_name: "ΔFrss",       latex_name: '\Delta F_\mathrm{rss}',        long_name: "Replaced land carbon sources and sinks",              unit: "PgC yr-1"}
   D_Eluc:      {sci_name: "ΔEluc",       latex_name: '\Delta E_\mathrm{luc}',        long_name: "CO2 emissions from land-use change",                  unit: "PgC yr-1"}
   D_Foxi_CH4:  {sci_name: "ΔFoxi_CH4",   latex_name: '\Delta F_\mathrm{oxi,CH_4}',   long_name: "Net CO2 flux from geological CH4 oxidation",          unit: "PgC yr-1"}
@@ -162,7 +163,7 @@ variables:
   D_Cfroz:  {sci_name: "ΔCfroz",    latex_name: '\Delta C_\mathrm{froz}',    long_name: "Change in frozen permafrost carbon pool",      unit: "PgC"}
   Cperm:    {sci_name: "Cperm",     latex_name: '\Delta C_\mathrm{perm}',    long_name: "Total permafrost carbon pool",                 unit: "PgC"}
 
-  D_Epf:    {sci_name: "ΔEpf",      latex_name: '\Delta E_\mathrm{pf}',      long_name: "Total carbon emissions from permafrost",  unit: "PgC yr-1"}
+  D_Epf:     {sci_name: "ΔEpf",      latex_name: '\Delta E_\mathrm{pf}',      long_name: "Total carbon emissions from permafrost",  unit: "PgC yr-1"}
   D_Epf_CO2: {sci_name: "ΔEpf_CO2", latex_name: '\Delta E_\mathrm{pf,CO_2}', long_name: "CO2 emissions from permafrost",           unit: "PgC yr-1"}
   D_Epf_CH4: {sci_name: "ΔEpf_CH4", latex_name: '\Delta E_\mathrm{pf,CH_4}', long_name: "CH4 emissions from permafrost",           unit: "TgC yr-1"}
 

@@ -3,7 +3,6 @@ OSCAR - Standard Workflow
 Description: Fast verification using bootstrap starter-kit.
 """
 import xarray as xr
-from dev.devtools.make_run_mode.tier0_standard.make_bootstrap_from_default import generate_bootstrap
 from oscar._core._model.OSCAR import OSCAR
 from oscar._io.paths import INTERNAL_BOOTSTRAP_DIR, get_paths, PACKAGE_ROOT
 from oscar._utils.load_config import load_config

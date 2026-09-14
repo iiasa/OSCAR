@@ -2,9 +2,9 @@
 
 We are excited to announce the release of **OSCAR v4**! OSCAR is an open-source, reduced-complexity Earth system model (ESM) designed to probabilistically emulate the coupled climate–carbon–chemistry system. This latest version introduces enhanced numerical stability, modular submodels, and recalibration using AR6, CMIP6, and TRENDY datasets, among other things.
 
-> [!WARNING]
+> [!IMPORTANT]
 > ### ⚠️ Beta Version - Active Development
-> This package is currently in **Beta (v4-beta1)**. We are actively refining features and documentation.
+> This package is currently in **Beta (v4-beta2)**. We are actively refining features and documentation.
 >
 > We expect a stable v4.0 by the end of 2026.
 > 

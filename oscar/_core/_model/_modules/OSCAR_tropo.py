@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 
 from oscar._core._base.cls_main import Model
-from oscar._core._base.fct_solve import sum_reg
+from oscar._core._base.fct_solve import sum_reg, safe_ratio
 
 
 #####################################################################
@@ -74,12 +74,12 @@ def Eq__r_kOH(Var, Par):
     r_kOH_H2 = Par.ch_OH_H2 * np.log1p(Var.D_H2 / Par.H2_pi)
     r_kOH_Tg = Par.ch_OH_Tg * np.log1p(Var.D_Tg / Par.Tg_pi)
     ## natural emissions
-    r_kOH_BVOC = Par.ch_OH_BVOC * np.log1p(sum_reg(Var.D_Enat_BVOC) / sum_reg(Par.Enat_BVOC_pi))
-    r_kOH_LNOx = Par.ch_OH_LNOx * np.log1p(Var.D_Enat_LNOx / Par.Enat_LNOx_pi)
+    r_kOH_BVOC = Par.ch_OH_BVOC * np.log(safe_ratio(1 + sum_reg(Var.D_Enat_BVOC) / sum_reg(Par.Enat_BVOC_pi)))
+    r_kOH_LNOx = Par.ch_OH_LNOx * np.log(safe_ratio(1 + Var.D_Enat_LNOx / Par.Enat_LNOx_pi))
     ## anthropogenic emissions
-    r_kOH_NOx = Par.ch_OH_NOx * np.log1p((sum_reg(Var.D_Eant_NOx) + sum_reg(Var.D_Ebb_NOx)) / (sum_reg(Par.Eant_NOx_pi) + sum_reg(Par.Ebb_NOx_pi)))
-    r_kOH_CO = Par.ch_OH_CO * np.log1p((sum_reg(Var.D_Eant_CO) + sum_reg(Var.D_Ebb_CO)) / (sum_reg(Par.Eant_CO_pi) + sum_reg(Par.Ebb_CO_pi)))
-    r_kOH_VOC = Par.ch_OH_VOC * np.log1p((sum_reg(Var.D_Eant_VOC) + sum_reg(Var.D_Ebb_VOC)) / (sum_reg(Par.Eant_VOC_pi) + sum_reg(Par.Ebb_VOC_pi)))
+    r_kOH_NOx = Par.ch_OH_NOx * np.log(safe_ratio(1 + (sum_reg(Var.D_Eant_NOx) + sum_reg(Var.D_Ebb_NOx)) / (sum_reg(Par.Eant_NOx_pi) + sum_reg(Par.Ebb_NOx_pi))))
+    r_kOH_CO = Par.ch_OH_CO * np.log(safe_ratio(1 + (sum_reg(Var.D_Eant_CO) + sum_reg(Var.D_Ebb_CO)) / (sum_reg(Par.Eant_CO_pi) + sum_reg(Par.Ebb_CO_pi))))
+    r_kOH_VOC = Par.ch_OH_VOC * np.log(safe_ratio(1 + (sum_reg(Var.D_Eant_VOC) + sum_reg(Var.D_Ebb_VOC)) / (sum_reg(Par.Eant_VOC_pi) + sum_reg(Par.Ebb_VOC_pi))))
     ## return
     return np.exp(r_kOH_CH4 + r_kOH_N2O + r_kOH_EESC + r_kOH_H2 + r_kOH_Tg + r_kOH_BVOC + r_kOH_LNOx + r_kOH_NOx + r_kOH_CO + r_kOH_VOC)
 

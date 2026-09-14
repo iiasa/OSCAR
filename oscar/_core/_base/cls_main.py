@@ -328,7 +328,7 @@ class Model():
         ## lists of variables to calculate (ordered)
         list_var_prog = list(self.var_prog)
         list_var_node = list(self.var_node)
-        list_var_diag = [var for lvl in np.sort(list(levels.keys()))[1:] for var in levels[lvl]]
+        list_var_diag = [var for lvl in np.sort(list(levels.keys())) for var in levels[lvl] if lvl > 0]
         list_var_keep = (list_var_prog + list_var_node) * keep_prog + var_keep
 
         ## get linear speeds for solving

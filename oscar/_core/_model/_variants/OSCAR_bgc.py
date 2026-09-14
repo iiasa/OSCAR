@@ -48,14 +48,14 @@ def Eq__r_npp(Var, Par):
 ## wildfire factor
 OSCAR_bgc.process(
     Out = 'r_vfire', 
-    In = ('r_npp',), 
+    In = ('r_npp', 'D_CO2'), 
     Eq = lambda Var, Par: Eq__r_vfire(Var, Par), 
     units = '1')
 
 def Eq__r_vfire(Var, Par):
     fct_npp = safe_exp(Par.x_fire_npp * np.log(Var.r_npp), f_max(Par.v_fire))
-    fct_npp2 = safe_exp(Par.x_fire_npp2 * np.log(Var.r_npp)**2, f_max(Par.v_fire))
-    return fct_npp * fct_npp2
+    fct_CO2 = safe_exp(Par.x_fire_CO2 * np.log1p(Var.D_CO2 / Par.CO2_pi)**2, f_max(Par.v_fire))
+    return fct_npp * fct_CO2
 
 
 ## total mortality factor

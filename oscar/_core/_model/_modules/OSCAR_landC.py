@@ -78,7 +78,7 @@ def Eq__D_Frss(Var, Par):
 OSCAR_landC.process(
     Out = 'NBP', 
     In = ('D_nbp', 'D_Aland', 'D_NBP_bk'), 
-    Eq = lambda Var, Par: Eq__NPP(Var, Par), 
+    Eq = lambda Var, Par: Eq__NBP(Var, Par), 
     units = 'PgC yr-1')
 
 def Eq__NBP(Var, Par):

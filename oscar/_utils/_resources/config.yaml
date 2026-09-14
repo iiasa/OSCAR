@@ -3,8 +3,8 @@
 # ==========================================================
 metadata:
   zenodo_base_url: "https://zenodo.org/api/records/"
-  core_data:  { version: "v4-beta1", zenodo_id: "" }
-  run_mode: { version: "v4-beta1", zenodo_id: "21822036" }
+  core_data:  { version: "v4-beta2", zenodo_id: "" }
+  run_mode: { version: "v4-beta2", zenodo_id: "22709506" }
   
   # Library Horizons
   build_end: &default_end 2100  # Official library ceiling
