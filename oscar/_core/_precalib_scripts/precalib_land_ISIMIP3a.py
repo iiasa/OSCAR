@@ -44,7 +44,7 @@ def precalib_params(mod_region, no_warnings=True):
         if no_warnings: warnings.filterwarnings('ignore')
 
         ## get original data
-        with xr.open_dataset(path_precalib_in + f'{name}.nc') as TMP:
+        with xr.open_dataset(path_precalib_in / f'{name}.nc') as TMP:
             ds = TMP.isel(year=slice(-21, None)).mean('year')
             ds = aggreg_regions(ds, mod_region)
             ds = ds.compute()

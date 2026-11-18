@@ -1,7 +1,20 @@
 # Changelog
 
 ### v4
-There will be a lot to write, here!
+
+#### v4-beta3 — user workflow branch (unreleased)
+* Standard, configured and customized modes use CMIP; SCI-lite/SCI-luc remain reserved for future advanced mode.
+* All public runs now return an `xarray.Dataset`. Python errors raise exceptions instead of terminating notebooks.
+* Settings/data use user locations, with `OSCAR_DATA_DIR` and per-call `data_dir` overrides. New projects include bundled settings and an inactive emissions example without requiring a download.
+* Added CLI initialization, project validation, download-only preparation, history selection, local library selection, headless runs, explicit output directories/names, replotting and overwrite controls.
+* Configured/customized workflows retain the solver restart anchor and use actual CMIP library coverage. Scenario aliases are normalized at the interface. Manifest identity and checksums prevent SCI/CMIP or region/history mix-ups.
+* Fixed the legacy bundled demonstration's inconsistent scenario-forcing ensemble labels in the workflow layer; the scientific core and bundled data files are unchanged.
+* Customized inputs validate units, names, duplicate records and numeric values; baseline filling/interpolation rules and input hashes are recorded. Only anthropogenic-emissions overrides are supported.
+* Downloads use checksums, staged extraction and resumable partial transfers. The beta2 URL remains unchanged; mismatched automatic downloads are blocked pending beta3 publication.
+* User wheels exclude developer scripts. Added package interface tests and a short real-model smoke test.
+* `VERSION` is the single version source for build metadata, Python/CLI and result metadata. Wheels bundle that file; `uv.lock` now records the editable project's version dynamically instead of the stale `3.3+u1` entry.
+* Migration: use `show_plot=True` explicitly for interactive plots; plotting defaults off. Existing result files require explicit overwrite. Old project files may need null input filenames, explicit units and an end year matching the selected library (or `null`).
+* Pending release gates: full compiled-data integration checks, regenerated beta3 bootstrap, published dataset registry and final installed-package download validation. Scientific changes since beta2 require separate scientific release notes.
 
 #### v3.3
 * Updated: global temperature response parameters to those used in the IPCC AR6 WG1 [Chapter 7](https://www.ipcc.ch/report/ar6/wg1/chapter/chapter-7), based on 35 CMIP6 Earth system models. Note that older parameters remain available.

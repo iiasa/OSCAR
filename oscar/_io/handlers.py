@@ -1,327 +1,338 @@
+"""Read customized-mode input files: emissions, radiative forcing and land use.
+
+OSCAR takes continuous annual time series. A variable the user supplies must
+cover every projection year; OSCAR does not interpolate, extrapolate or rescale
+user values. Variables the user does not supply come from the baseline scenario.
 """
-OSCAR Data Handlers
-Architecture: Specialized Variable Handlers + Specialized Regional Handlers
-"""
+import csv
+
+import numpy as np
 import pandas as pd
 import xarray as xr
-import numpy as np
-import re
 import yaml
-from oscar._io.paths import PACKAGE_ROOT
 
-# --- SHARED UTILS ---
+from oscar._io.paths import PACKAGE_ROOT, REGIONS_INFO_PATH
+
+# Supported inputs, their units and dimensions: oscar/_utils/_resources/input_species.yaml.
+_REGISTRY = yaml.safe_load((PACKAGE_ROOT / 'oscar' / '_utils' / '_resources' / 'input_species.yaml').read_text())
+EMISSIONS = {var: spec['unit'] for var, spec in _REGISTRY['anthropogenic_emissions'].items()}
+RADIATIVE_FORCING = {var: spec['unit'] for var, spec in _REGISTRY['rf'].items()}
+LAND_USE = {var: spec['unit'] for var, spec in _REGISTRY['lulcc'].items()}
+UNITS = {**EMISSIONS, **RADIATIVE_FORCING, **LAND_USE}
+FORMATS = ('oscar-csv', 'iamc-ar6-public', 'ceds')
+GLOBAL_NAMES = {'World', 'Global', 'Globe'}
+
 
 def load_var_mapping(format_type):
-    """Loads the translation registry from resources."""
-    map_name = f"vars_map_{format_type}.yaml"
-    path = PACKAGE_ROOT / "oscar" / "_utils" /  "_resources" / map_name
+    """Translation registry of an external format (vars_map_<format>.yaml)."""
+    path = PACKAGE_ROOT / 'oscar' / '_utils' / '_resources' / f'vars_map_{format_type}.yaml'
     if not path.exists():
-        raise FileNotFoundError(f"[OSCAR] Missing mapping registry: {map_name}")
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        raise FileNotFoundError(f'[OSCAR] Missing mapping registry: {path.name}')
+    return yaml.safe_load(path.read_text(encoding='utf-8'))
 
-def _melt_and_clean(csv_path):
-    """
-    Standardizes Wide/Long CSV with robust cleaning.
-    Normalizes 'Variable' strings to prevent whitespace/case mismatches.
-    """
-    # 1. Read the file (Auto-separator, Comma-decimal)
-    df = pd.read_csv(csv_path, sep=None, decimal=',', engine='python')
-    # 2. Clean column names (strip whitespace)
+
+def model_regions(region):
+    """Region codes of a model region set, in model order, and the names they may appear under."""
+    with (REGIONS_INFO_PATH / 'OSCAR_reg_names.csv').open() as stream:
+        row = next(row for row in csv.reader(stream) if row[0] == region)
+    codes = [item.split(':', 1)[0] for item in row[1:] if item]
+    aliases = {item.split(':', 1)[-1].strip(): item.split(':', 1)[0] for item in row[1:] if item}
+    aliases.update({code: code for code in codes})
+    return codes, aliases
+
+
+# --- Reading files -------------------------------------------------------------
+
+def _long_table(path):
+    """CSV as long rows; wide files (one column per year) are melted."""
+    df = pd.read_csv(path)
     df.columns = [str(c).strip() for c in df.columns]
-
-    # 3. IDENTIFY YEAR COLUMNS (Numeric headers)
-    year_cols = [c for c in df.columns if str(c).replace('.', '').isdigit()]
-    
-    if year_cols:
-        # Wide Format
-        id_vars = [c for c in df.columns if c not in year_cols]
-        df = df.melt(id_vars=id_vars, value_vars=year_cols, var_name='Year', value_name='Value')
-    else:
-        # Long Format: ensure standardized capitalization for core columns only
-        # We DON'T capitalize 'Variable' content here, only the column name
-        rename_map = {c: c.title() for c in df.columns if c.lower() in ['scenario', 'variable', 'region', 'unit']}
-        df = df.rename(columns=rename_map)
-
-    # --- STEP 4: CLEAN ALL TEXT COLUMNS ---
-    text_cols = [c for c in df.columns if c not in ['Year', 'Value']]
-    
-    for col in text_cols:
-        # 1. Convert to string
-        df[col] = df[col].astype(str)
-        
-        # 2. REMOVE ALL WHITESPACE (Newlines, tabs, spaces)
-        # We use .str.replace and remove the trailing .strip() 
-        # because \s+ already catches leading/trailing whitespace.
-        df[col] = df[col].str.replace(r'\s+', '', regex=True)
-
-    # Special handling for decimal artifacts in Regions (e.g., '1.0' -> '1')
-    if 'Region' in df.columns:
-        df['Region'] = df['Region'].str.replace(r'\.0$', '', regex=True)
-
-    # Ensure Value is float and Year is int
-    df['Year'] = pd.to_numeric(df['Year'], errors='coerce').fillna(0).astype(int)
-    df['Value'] = pd.to_numeric(df['Value'], errors='coerce').fillna(0.0)
-    
+    years = [c for c in df if c.isdigit()]
+    if years:
+        df = df.melt(id_vars=[c for c in df if c not in years], value_vars=years,
+                     var_name='year', value_name='value')
     return df
 
-# --- STEP 1: VARIABLE TRANSLATORS ---
-def handle_atmospheric_vars(csv_path, format_type):
+
+def _translate(df, format_type):
+    """IAMC / CEDS rows -> oscar-csv rows (scen, year, reg_land, oscar_var, oscar_id, value, unit)."""
+    df = df.rename(columns={c: c.lower() for c in df if c.lower() in
+                            ('scenario', 'variable', 'region', 'unit', 'year', 'value')})
+    required = {'scenario', 'variable', 'region', 'unit', 'year', 'value'}
+    if not required <= set(df):
+        raise ValueError(f'CSV missing columns: {sorted(required - set(df))}')
+    mapping = load_var_mapping(format_type)
+    emissions, forcing = mapping.get('anthropogenic_emissions', {}), mapping.get('radiative_forcing', {})
+    rows = []
+    for _, row in df.iterrows():
+        name, unit = str(row.variable).strip(), str(row.unit).strip()
+        if name in emissions:
+            var, species, factor, *expected = emissions[name]
+            # Older mapping metadata spells NOx as NOX; the model input is NOx.
+            var = 'D_Eant_NOx' if var == 'D_Eant_NOX' else var
+            species = var if species == 'D_Eant_NOX' else species
+        elif name in forcing:
+            var, factor, *expected = forcing[name]
+            species = var
+        else:
+            raise ValueError(f'Unsupported variable {name!r}; remove unrelated rows from this input.')
+        if var not in UNITS:
+            raise ValueError(f'{name!r} maps to {var}, which OSCAR does not take as an input.')
+        if not expected or unit != expected[0]:
+            raise ValueError(f'Unexpected units for {name}: {unit!r}. Expected {expected[0] if expected else "?"}.')
+        rows.append({'scen': row.scenario, 'year': row.year, 'reg_land': row.region, 'oscar_var': var,
+                     'oscar_id': species, 'value': float(row.value) * float(pd.eval(factor)), 'unit': UNITS[var]})
+    return pd.DataFrame(rows)
+
+
+def _clean(df, required):
+    if not required <= set(df):
+        raise ValueError(f'CSV missing columns: {sorted(required - set(df))}')
+    for col in required - {'year', 'value'}:
+        if df[col].isna().any():
+            raise ValueError(f'CSV has missing {col} values.')
+        df[col] = df[col].astype(str).str.strip()
+    for col in ('year', 'value'):
+        df[col] = pd.to_numeric(df[col], errors='raise')
+        if not np.isfinite(df[col]).all():
+            raise ValueError(f'CSV {col} must contain finite numeric values.')
+    if (df.year != df.year.astype(int)).any():
+        raise ValueError('CSV years must be integers.')
+    df['year'] = df.year.astype(int)
+    return df
+
+
+def read_atmospheric(path, format_type, region):
+    """Emissions and radiative forcing as global totals (no region dimension).
+
+    For each scenario, year, variable and species: a World (Global) row is used
+    as the total and regional rows are ignored, so nothing is counted twice;
+    without a World row, the regional rows are added up.
     """
-    Step 1A: Chemical and Unit Translation for Emissions and RF.
-    Includes diagnostic info for non-matching variables.
-    """
-    import re
+    if format_type not in FORMATS:
+        raise ValueError(f'Atmospheric format must be one of {", ".join(FORMATS)}.')
+    df = _long_table(path)
     if format_type != 'oscar-csv':
-        df = _melt_and_clean(csv_path)
-        mapping = load_var_mapping(format_type)
-
-        df['oscar_var'] = None
-        df['oscar_id'] = None
-
-        # 1. Normalize CSV Variable names (Squeeze whitespace/newlines)
-        df['Variable'] = df['Variable'].astype(str).str.replace(r'\s+', '', regex=True)
-
-        # Track which registry keys were successfully matched
-        matched_keys = set()
-
-        for cat in ['anthropogenic_emissions', 'radiative_forcing']:
-            if cat not in mapping: continue
-            
-            for registry_key, data in mapping[cat].items():
-                # 2. Normalize Registry Key (Squeeze whitespace/newlines)
-                clean_reg_key = re.sub(r'\s+', '', str(registry_key))
-                
-                mask = df['Variable'] == clean_reg_key
-                
-                if mask.any():
-                    o_var, o_id, math_str = data[0], data[1], data[2]
-                    df.loc[mask, 'Value'] = pd.to_numeric(df.loc[mask, 'Value']) * pd.eval(math_str)
-                    df.loc[mask, 'oscar_var'] = o_var
-                    df.loc[mask, 'oscar_id'] = o_id
-                    matched_keys.add(registry_key)
-                    #print(df[['Variable', 'Year', 'Value','oscar_var', 'oscar_id']].head(15))  # Debug: Show the first few matches for this registry key
-
-        # rename the columns to match the expected output
-        df = df.rename(columns={'Scenario': 'scen', 'Year': 'year', 'Region': 'reg_input', 'Value': 'value'})
-    else:
-        # For 'oscar-csv' format, we assume the CSV already has the correct columns and values
-        df = pd.read_csv(csv_path, sep=None, decimal=',', engine='python')
-        # rename one column reg_land for convenience
-        df = df.rename(columns={'reg_land': 'reg_input'})
-    
-    # 3. Filter and Split
-    df = df.dropna(subset=['oscar_var'])
+        df = _translate(df, format_type)
+    df = _clean(df, {'scen', 'year', 'reg_land', 'oscar_var', 'oscar_id', 'value', 'unit'})
     if df.empty:
-        return xr.Dataset()
+        raise ValueError('Input CSV contains no rows.')
+    keys = ['scen', 'year', 'reg_land', 'oscar_var', 'oscar_id']
+    if df.duplicated(keys).any():
+        raise ValueError('Duplicate rows found; aggregate them explicitly before running.')
+    _, aliases = model_regions(region)
+    unknown = sorted(set(df.reg_land) - GLOBAL_NAMES - set(aliases))
+    if unknown:
+        raise ValueError(f'Unknown regions {unknown}; use World or {region} region names.')
+    for var, rows in df.groupby('oscar_var'):
+        if var not in EMISSIONS and var not in RADIATIVE_FORCING:
+            raise ValueError(f'{var} is not an emissions or radiative-forcing input. '
+                             f'Supported: {", ".join({**EMISSIONS, **RADIATIVE_FORCING})}.')
+        if set(rows.unit) != {UNITS[var]}:
+            raise ValueError(f'{var} units must be {UNITS[var]!r}; found {sorted(set(rows.unit))}.')
+        if var != 'D_Eant_Xhalo' and set(rows.oscar_id) != {var}:
+            raise ValueError(f'oscar_id must equal {var} except for halogens (D_Eant_Xhalo).')
+    is_global = df.reg_land.isin(GLOBAL_NAMES)
+    group = ['scen', 'year', 'oscar_var', 'oscar_id']
+    has_global = df[is_global].set_index(group).index
+    ignored = df[~is_global & df.set_index(group).index.isin(has_global)]
+    if not ignored.empty:
+        print(f"[OSCAR] Using World totals; regional rows ignored for: {', '.join(sorted(set(ignored.oscar_var)))}")
+    totals = pd.concat([df[is_global], df[~is_global & ~df.set_index(group).index.isin(has_global)]])
+    totals = totals.groupby(group, as_index=False)['value'].sum()
+    pieces = []
+    for var, rows in totals.groupby('oscar_var'):
+        if var == 'D_Eant_Xhalo':
+            da = rows.rename(columns={'oscar_id': 'spc_halo'}).set_index(['scen', 'year', 'spc_halo'])['value']
+        else:
+            da = rows.set_index(['scen', 'year'])['value']
+        da = da.to_xarray().rename(var)
+        da.attrs['units'] = UNITS[var]
+        pieces.append(da)
+    return xr.merge(pieces, join='outer')
 
-    # --- SEPARATION LOGIC ---
-    # Group A: Standard (Eff, E_CH4, RF_solar, etc.) - oscar_var and oscar_id are the same
-    # These should NOT have a species dimension in the final Dataset
-    df_std = df[df['oscar_var'] == df['oscar_id']]
 
-    # Group B: Halogens (D_Eant_Xhalo) - oscar_var is 'D_Eant_Xhalo', oscar_id is the compound name
-    # These MUST have the spc_halo dimension
-    df_halo = df[df['oscar_var'] == 'D_Eant_Xhalo']
+def read_land_use(path, region):
+    """Land-use inputs, kept per model region (names must match the region set).
 
-    datasets = []
+    Columns: scen, year, reg_land, oscar_var, bio_from, bio_to, value and an optional
+    unit; harvest variables (D_dA_wharv1/2) use bio_land instead of bio_from/bio_to.
+    """
+    df = _long_table(path)
+    df.columns = [c.lower() for c in df.columns]
+    df = df.rename(columns={'scenario': 'scen', 'region': 'reg_land', 'variable': 'oscar_var'})
+    df = _clean(df, {'scen', 'year', 'reg_land', 'oscar_var', 'value'})
+    codes, aliases = model_regions(region)
+    unknown = sorted(set(df.reg_land) - set(aliases))
+    if unknown:
+        raise ValueError(f'Unknown land-use regions {unknown}; use {region} region names (no World totals).')
+    df['reg_land'] = df.reg_land.map(aliases)
+    pieces = []
+    for var, rows in df.groupby('oscar_var'):
+        if var not in LAND_USE:
+            raise ValueError(f'{var} is not a land-use input. Supported: {", ".join(LAND_USE)}.')
+        if 'unit' in rows and set(rows.unit.astype(str).str.strip()) != {LAND_USE[var]}:
+            raise ValueError(f'{var} units must be {LAND_USE[var]!r}.')
+        biomes = ['bio_land'] if var.startswith('D_dA_wharv') else ['bio_from', 'bio_to']
+        if not set(biomes) <= set(rows):
+            raise ValueError(f'{var} rows need columns {", ".join(biomes)}.')
+        index = ['scen', 'year', 'reg_land'] + biomes
+        rows = rows.assign(**{b: rows[b].astype(str).str.strip() for b in biomes})
+        if rows.duplicated(index).any():
+            raise ValueError(f'Duplicate {var} rows found.')
+        da = rows.set_index(index)['value'].to_xarray().rename(var)
+        da.attrs['units'] = LAND_USE[var]
+        pieces.append(da)
+    if not pieces:
+        raise ValueError('Land-use CSV contains no rows.')
+    return xr.merge(pieces, join='outer')
 
-    # Process Standard variables
-    if not df_std.empty:
-        # We pivot using 'oscar_var' as both column and index to keep it 3D (Scen, Year, Reg)
-        ds_std = df_std.pivot_table(index=['scen', 'year', 'reg_input'], columns='oscar_var', values='value', aggfunc='sum').to_xarray()
-        datasets.append(ds_std)
 
-    # Process Halogens
-    if not df_halo.empty:
-        ds_halo = df_halo.pivot_table(index=['scen', 'year', 'reg_input', 'oscar_id'], columns='oscar_var', values='value',aggfunc='sum').to_xarray()
-        # Rename the extra dimension to spc_halo
-        ds_halo = ds_halo.rename({'oscar_id': 'spc_halo'})
-        datasets.append(ds_halo)
+def read_netcdf(source, units=None):
+    """Inputs from a NetCDF file or an in-memory xr.Dataset; each variable needs year and units.
 
-    # Merge the two groups
-    if not datasets:
-        return xr.Dataset()
-        
-    ds = xr.merge(datasets)
-    
-    # --- DEBUG PRINT ---
-    '''
-    print("\n--- XARRAY STRUCTURE CHECK ---")
-    for v in ds.data_vars:
-        print(f"Variable: {v:10} | Dimensions: {ds[v].dims}")
-    '''
-    
+    units: {variable: unit} accepted (default: the customized inputs of input_species.yaml).
+    """
+    units = units or UNITS
+    if isinstance(source, xr.Dataset):
+        ds = source.copy()
+    else:
+        with xr.open_dataset(source) as ds:
+            ds = ds.load()
+    if not ds.data_vars or 'year' not in ds.dims:
+        raise ValueError('Custom forcing must contain variables and a year dimension.')
+    if 'config' in ds.dims:
+        raise ValueError('Custom forcing must be shared across the ensemble; omit the config dimension.')
+    for var in ds.data_vars:
+        if var not in units:
+            raise ValueError(f'Unsupported input {var!r}. Supported: {", ".join(units)}.')
+        if ds[var].attrs.get('units') != units[var]:
+            raise ValueError(f'{var} units must be {units[var]!r}.')
+        if var == 'D_Eant_Xhalo' and 'spc_halo' not in ds[var].dims:
+            raise ValueError('D_Eant_Xhalo needs a spc_halo dimension.')
+    years = ds.year.values
+    if np.any(years != years.astype(int)) or np.any(np.diff(years) <= 0):
+        raise ValueError('Custom forcing years must be unique, increasing integers.')
+    if 'scen' in ds.dims and len(set(map(str, ds.scen.values))) != ds.sizes['scen']:
+        raise ValueError('Custom scenario names must be unique.')
+    if 'scen' not in ds.dims:
+        name = str(ds.scen.item()) if 'scen' in ds.coords else 'my-scenario'
+        ds = ds.drop_vars('scen', errors='ignore').expand_dims(scen=[name])
+    # Emissions and radiative forcing are used as global totals.
+    for var in ds.data_vars:
+        if var not in LAND_USE and 'reg_land' in ds[var].dims:
+            ds[var] = ds[var].sum('reg_land', min_count=1).assign_attrs(ds[var].attrs)
     return ds
 
-def handle_lulcc_vars(csv_path):
+
+# --- Checks against the projection period ---------------------------------------
+
+def _ranges(years):
+    """[2024, 2025, 2026, 2030] -> '2024–2026, 2030'."""
+    years, out = sorted(int(y) for y in years), []
+    for year in years:
+        if out and year == out[-1][1] + 1:
+            out[-1][1] = year
+        else:
+            out.append([year, year])
+    return ', '.join(f'{a}–{b}' if a != b else f'{a}' for a, b in out)
+
+
+def _series(da):
+    """Supplied series of a variable: one per halogen species, otherwise one per variable."""
+    if 'spc_halo' in da.dims:
+        return [(f'{da.name} ({s})', da.sel(spc_halo=s)) for s in da.spc_halo.values
+                if bool(da.sel(spc_halo=s).notnull().any())]
+    return [(da.name, da)]
+
+
+def supplied(da):
+    """True where a scenario supplies this variable at all (any value in any year)."""
+    return bool(da.notnull().any())
+
+
+def copy_last_year(ds, end):
+    """Copy the values of end-1 to end where end is missing (libraries and many inputs stop in 2099).
+
+    Only the final year is filled; any other gap is left to the coverage check.
     """
-    Step 1B: Translates LULCC variables into a 5D pivot structure.
+    if 'year' not in ds.dims or end - 1 not in ds.year.values:
+        return ds
+    if end not in ds.year.values:
+        ds = xr.concat([ds, ds.sel(year=[end - 1]).assign_coords(year=[end])], dim='year',
+                       data_vars='minimal', coords='minimal', compat='override')
+    ds = ds.copy()
+    for var in ds.data_vars:
+        if 'year' in ds[var].dims:
+            da = ds[var]
+            filled = da.sel(year=end).fillna(da.sel(year=end - 1))
+            ds[var] = xr.where(da.year == end, filled, da).transpose(*da.dims).assign_attrs(da.attrs)
+    return ds
+
+
+def check_full_coverage(user, first, last):
+    """Each supplied variable (each halogen species) needs a value in every year first..last.
+
+    A variable a scenario does not supply at all is filled from the baseline. Land use
+    may cover only some regions and biomes (the others mean no change).
     """
-    df = _melt_and_clean(csv_path)
-    ds = df.pivot_table(index=['Scenario', 'Year', 'Region', 'Bio_from', 'Bio_to'], columns='Variable', values='Value').to_xarray()
-    
-    return ds.rename({'Scenario': 'scen', 'Year': 'year', 'Region': 'reg_input'})
+    needed = set(range(first, last + 1))
+    if 'D_Eluc' in user and len({supplied(user.D_Eluc.sel(scen=s)) for s in user.scen.values}) > 1:
+        raise ValueError('D_Eluc must be supplied for every scenario in your inputs, or for none.')
+    for scen in user.scen.values:
+        for var in user.data_vars:
+            if not supplied(user[var].sel(scen=scen)):
+                continue
+            for label, da in _series(user[var].sel(scen=scen)):
+                present = da.notnull()
+                for dim in set(da.dims) - {'year'}:
+                    present = present.any(dim) if var in LAND_USE else present.all(dim)
+                covered = {int(y) for y in da.year.values[present.values]}
+                missing = needed - covered
+                if missing:
+                    raise ValueError(
+                        f'{label} in scenario "{scen}" is missing {_ranges(missing)}. OSCAR needs a continuous '
+                        f'annual time series covering {first}–{last}; please provide the full time series.')
 
-# --- STEP 2: REGIONAL HANDLERS ---
 
-# --- SHARED REGIONAL UTILS ---
-def _load_allowed_regions(mod_region):
+def _global(da):
+    """Global total per year (and scenario, halogen species); ensemble mean where members differ."""
+    for dim in set(da.dims) - {'year', 'scen', 'spc_halo'}:
+        da = da.mean(dim) if dim == 'config' else da.sum(dim, min_count=1)
+    return da
+
+
+def continuity_warnings(user, history_forcing, scenario_forcing, history_output, hist_end):
+    """Warn (values unchanged) when a series jumps at the history/projection boundary.
+
+    Allowed jump: twice the largest jump at that boundary among the library scenarios,
+    and never less than 10% of the historical value. For a variable the model computes
+    (not in the library forcing, e.g. D_Eluc in CMIP), the reference is the largest
+    year-to-year change over the last 10 historical years.
     """
-    Retrieves the official list of region names for a specific resolution.
-    Preserves the 0, 1, 2... order from the CSV rows.
-    """
-    import csv
-    
-    reg_meta_path =  PACKAGE_ROOT / "oscar" /"_core" / "_regions" / "OSCAR_reg_dict.csv"
-    with open(reg_meta_path, "r") as f:
-        reader = csv.reader(f)
-        header = next(reader)
-        
-        if mod_region not in header:
-            raise ValueError(f"[OSCAR] Resolution '{mod_region}' not found in metadata.")
-        
-        col_idx = header.index(mod_region)
-        allowed = []
-        for row in reader:
-            name = row[col_idx].strip()
-            # Preserve order and ensure uniqueness
-            if name and name not in allowed:
-                allowed.append(name)
-    return allowed
-
-# --- REGIONAL HANDLERS ---
-
-def handle_atmospheric_reg(ds, mod_region):
-    """
-    Step 2A: Regional aggregation for Atmospheric drivers.
-    Logic: Matches squeezed CSV regions to official model regions.
-    """
-    import re
-    import numpy as np
-
-    # 1. Load official regions (e.g., ['World', 'Middle East', ...])
-    raw_allowed = _load_allowed_regions(mod_region)
-    
-    # 2. CREATE A SQUEEZED MAP
-    # Maps "MiddleEast" (CSV) -> "Middle East" (Official)
-    clean_to_official = {re.sub(r'\s+', '', str(a)): str(a) for a in raw_allowed}
-    clean_allowed_names = list(clean_to_official.keys())
-    
-    # Standardize global aliases
-    world_aliases = ['World', 'Global', 'Globe', 'Unknown']
-
-    # 3. IDENTIFY MATCHES
-    # ds.reg_input contains the regions from your pivot_table
-    user_regions = [str(r) for r in ds.reg_input.values]
-    valid_user_names = [r for r in user_regions if r in clean_allowed_names or r in world_aliases]
-
-    if not valid_user_names:
-        print(f"\n[!] REGIONAL ERROR for {mod_region}:")
-        print(f"    Regions found in Data: {user_regions}")
-        print(f"    Expected (squeezed):   {clean_allowed_names[:5]}...")
-        raise ValueError(f"[OSCAR] No valid regions found for {mod_region}.")
-
-    # 4. FILTER AND SUM
-    # This aggregates all valid input regions into a single Global total
-    ds_valid = ds.sel(reg_input=valid_user_names)
-    #print(ds_valid[['Eff']].isel(year=0, reg_input=0))  # Debug: Check the first few values of the valid dataset
-    ds_glob = ds_valid.sum('reg_input', min_count=1)
-
-    # 5. ALIGN WITH MODEL RESOLUTION
-    # OSCAR expects a 'reg_land' dimension with specific length
-    # load the allowed regions
-    allowed_regions = _load_allowed_regions(mod_region)
-    ds_out = ds_glob.expand_dims(reg_land=allowed_regions).copy()
-    
-    for var in ds_out.data_vars:
-        # Place the total in the first region (index 0) and set all other regions to 0.0
-        first_reg_land = ds_out.reg_land[0]
-        mask = ds_out.reg_land != first_reg_land
-        ds_out[var] = ds_out[var].where(~mask, 0.0)
-
-    # --- DEBUG: CHECK IF DATA SURVIVED ---
-    '''
-    if 'Eff' in ds_out:
-        test_val = ds_out['Eff'].sel(year=ds_out.year.min(), reg_land=0).values
-        print(f"[DEBUG] handle_atmospheric_reg: Year {ds_out.year.min().values} Eff = {test_val} PgC")
-    '''
-
-    # 6. TEMPORAL INTERPOLATION
-    # Fills gaps (like the 2015 gap) and ensures yearly resolution
-    year_range = np.arange(int(ds_out.year.min()), int(ds_out.year.max()) + 1)
-    return ds_out.interp(year=year_range, method="linear").fillna(0.0)
-
-
-def handle_lulcc_reg(ds, mod_region):
-    """
-    Step 2B: Regional alignment for LULCC drivers.
-    Logic: STRICT MATCHING. Reindexes to full model shape.
-    """
-    allowed_list = _load_allowed_regions(mod_region)
-    user_regions = [str(r) for r in ds.reg_input.values]
-    
-    # --- MISMATCH CHECK ---
-    valid_names = [r for r in user_regions if r in allowed_list]
-    mismatched = [r for r in user_regions if r not in allowed_list]
-
-    if mismatched:
-        print(f"\n[!] WARNING: LULCC data for these regions was NOT used:")
-        print(f"    >> {', '.join(mismatched)}")
-        print(f"    Reason: Names do not match the '{mod_region}' official list.")
-
-    if not valid_names:
-        raise ValueError(f"[OSCAR ERROR] No valid regions found in LULCC data for {mod_region}.")
-
-    # 1. Map names to official numeric indices
-    name_to_idx = {name: i for i, name in enumerate(allowed_list)}
-    numeric_coords = [name_to_idx[r] for r in valid_names]
-    
-    # 2. Slice and reindex
-    ds_final = (ds.sel(reg_input=valid_names)
-                  .assign_coords(reg_input=numeric_coords)
-                  .rename({'reg_input': 'reg_land'})
-                  .reindex(reg_land=np.arange(len(allowed_list)), fill_value=0.0))
-
-    # 3. Yearly Interpolation
-    year_range = np.arange(int(ds_final.year.min()), int(ds_final.year.max()) + 1)
-    return ds_final.interp(year=year_range, method="linear").fillna(0.0)
-
-
-# --- MASTER COMPILER ---
-
-def compile_custom_forcing(project_path, user_csv_map, mod_region):
-    """
-    Master orchestrator for Level-2 runs.
-    Strictly identifies format (ceds vs iamc-ar6-public).
-    """
-    ds_final = xr.Dataset()
-
-    # 1. Process Atmosphere
-    atmo_cfg = user_csv_map.get('atmospheric', {})
-    if atmo_cfg.get('file'):
-        # DYNAMIC FORMAT DETECTION:
-        # Check if 'format' exists in the configuration
-        atmo_format = atmo_cfg.get('format')
-        
-        if not atmo_format:
-            print("\n[!] ERROR: Atmospheric forcing format is missing in the configuration.")
-            print("Please specify 'format: ceds' or 'format: iamc-ar6-public'.")
-            raise ValueError("Atmospheric forcing format missing.")
-
-        print(f"- Compiling atmospheric forcing [Format: {atmo_format}]...")
-        
-        ds_atmo_raw = handle_atmospheric_vars(project_path / atmo_cfg['file'],format_type=atmo_format)
-        ds_atmo_final = handle_atmospheric_reg(ds_atmo_raw, mod_region)
-
-        ds_final = xr.merge([ds_final, ds_atmo_final])
-
-    # 2. Process Land-use (Assuming lulcc doesn't require strict format check yet)
-    lulcc_cfg = user_csv_map.get('lulcc', {})
-    if lulcc_cfg.get('file'):
-        print(f"- Compiling land-use forcing...")
-        ds_lulcc_raw = handle_lulcc_vars(project_path / lulcc_cfg['file'])
-        ds_lulcc_final = handle_lulcc_reg(ds_lulcc_raw, mod_region)
-        ds_final = xr.merge([ds_final, ds_lulcc_final])
-
-    return ds_final
+    first = hist_end + 1
+    for var in user.data_vars:
+        if var not in history_forcing:
+            # Computed by the model (e.g. D_Eluc in CMIP): compare with the computed history.
+            hist = _global(history_output[var])
+            past = hist.sel(year=slice(hist_end - 10, hist_end))
+            last = hist.sel(year=hist_end)
+            reference = abs(past.diff('year')).max('year')
+        else:
+            last = _global(history_forcing[var].sel(year=hist_end))
+            reference = abs(_global(scenario_forcing[var].sel(year=first)) - last)
+            if 'scen' in reference.dims:
+                reference = reference.max('scen')
+        for scen in user.scen.values:
+            if not supplied(user[var].sel(scen=scen)):
+                continue
+            value = _global(user[var].sel(scen=scen, year=first))
+            for label, da in _series(value.rename(var)):
+                # da is one series (one halogen species already selected); pick the same in the references.
+                select = {'spc_halo': da.spc_halo.item()} if 'spc_halo' in da.coords else {}
+                h, ref, u = float(last.sel(select)), float(reference.sel(select)), float(da)
+                allowed = max(2 * ref, 0.1 * abs(h))
+                if abs(u - h) > allowed:
+                    print(f'[OSCAR] Warning: {label} in "{scen}" jumps from {h:.4g} ({hist_end}, history) to '
+                          f'{u:.4g} ({first}, your input); allowed change ±{allowed:.3g}. '
+                          'Check that your series continues from the historical data.')

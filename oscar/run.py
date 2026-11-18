@@ -1,89 +1,64 @@
-# oscar/run.py
-from oscar._utils.help import show_info as _info
-from oscar._io._download import ensure_configured_library, ensure_customized_library
+"""Public workflows: standard, configured and customized modes."""
+from oscar._io.paths import use_data_dir
 
-def info(mode=None):
-    """Entry point for terminal-based help."""
-    return _info(mode)
+# Scientific and solver choices that the standard demonstration does not accept.
+STANDARD_FIXED = {'scenario', 'region', 'hist_type', 'variables', 'library_dir',
+                  'project', 'experiment', 'nt', 'scheme', 'adapt_nt'}
+# Configured runs use the library's ensemble and solver settings.
+SOLVER_FIXED = {'nt', 'scheme', 'adapt_nt', 'dtype', 'members', 'n_config', 'nMC'}
 
 
-def download(mode="customized", hist_type=None, region=None):
-    """
-    Public data download helper.
+def info(mode=None, **kwargs):
+    from oscar._utils.help import show_info
+    return show_info(mode, **kwargs)
 
-    Args:
-        mode (str): "customized" (default) or "configured".
-        hist_type (str): Required only for configured mode.
-        region (str): Required only for configured mode.
 
-    Returns:
-        Path to the downloaded/existing local library.
-    """
-    if mode == "customized":
-        return ensure_customized_library()
+def download(mode='configured', hist_type=None, region=None, data_dir=None, option=None):
+    """Prepare CMIP data without running, fetch the customized templates and examples, or
+    an advanced run option region (option='SCI-lite'; region= for options with several regions)."""
+    from oscar._io._download import ensure_configured_library, ensure_customized_library
+    with use_data_dir(data_dir):
+        if mode == 'customized':
+            return ensure_customized_library()
+        if mode == 'advanced':
+            from oscar._workflows.advanced_runs import download_option
+            return download_option(option, region)
+        if mode != 'configured':
+            raise ValueError("Download mode must be 'configured', 'customized' or 'advanced'.")
+        from oscar._workflows.configured_runs import resolve_selection
+        sel = resolve_selection(region=region, hist_type=hist_type)
+        return ensure_configured_library(sel.hist_type, sel.region)
 
-    if mode == "configured":
-        if not hist_type or not region:
-            raise ValueError(
-                "Configured mode download requires both 'hist_type' and 'region'."
-            )
-        return ensure_configured_library(hist_type, region)
 
-    raise ValueError("Unknown mode. Supported values are: 'customized', 'configured'.")
+def run(mode='standard', data_dir=None, **kwargs):
+    """Return an xarray.Dataset. data_dir overrides settings for this call only."""
+    if mode not in ('standard', 'configured', 'customized', 'advanced'):
+        raise ValueError(f'Unknown mode {mode!r}. Choose standard, configured or customized.')
+    with use_data_dir(data_dir):
+        if mode == 'standard':
+            chosen = sorted(set(kwargs) & STANDARD_FIXED)
+            if chosen:
+                raise ValueError(f'Standard mode is a fixed demonstration; remove {", ".join(chosen)}. '
+                                 'Use configured or customized mode for selections.')
+            from oscar._workflows.standard_run import run_standard
+            return run_standard(**kwargs)
+        if mode == 'configured':
+            chosen = sorted(set(kwargs) & SOLVER_FIXED)
+            if chosen:
+                raise ValueError(f'Configured runs use the library ensemble and solver settings; remove '
+                                 f'{", ".join(chosen)}.')
+            from oscar._workflows.configured_runs import run_configured
+            return run_configured(**kwargs)
+        if mode == 'advanced':
+            # For close collaborators: settings file, inputs (path or Dataset), output path or memory.
+            from oscar._workflows.advanced_runs import run_advanced
+            return run_advanced(**kwargs)
+        from oscar._workflows.customized_runs import run_customized
+        return run_customized(**kwargs)
 
-import sys
-from oscar._io.paths import get_user_data_dir, PACKAGE_ROOT
 
-def run(mode="standard", **kwargs):
-    """
-    Main entry point for OSCAR simulations.
-    """
-    
-    # 1. MODE: STANDARD (Instant verification using internal bootstrap)
-    if mode == "standard":
-        from oscar._workflows import standard_run
-        Out_all, msg = standard_run.run_standard(**kwargs)
-        print(Out_all)
-        print(msg)
-        return None
-
-    # 2. DATA CHECK (For scientific modes: configured, customized, advanced)
-    # This checks for a saved path OR a manually provided 'data_dir' argument.
-    data_root = get_user_data_dir()
-    
-    if data_root is None:
-        # --- THE WARM WELCOME GUIDE ---
-        width = 85
-        print("\n" + "="*width)
-        print(f"{' WELCOME TO OSCAR ':^85}")
-        print("="*width)
-        print("You have selected a mode that requires a designated home for the data library.")
-        print("To start your scientific research, please initialize your data folder once.")
-        
-        print("\nACTION: Run one of these commands in your terminal:")
-        print(f"  {'# To use the default [Project Root]/data:':<50}")
-        print("  python -c \"import oscar; oscar.set_data_dir()\"")
-        
-        print(f"\n  {'# To use a custom external drive:':<50}")
-        print("  python -c \"import oscar; oscar.set_data_dir('/path/to/your/drive')\"")
-        
-        print("\nOnce initialized, OSCAR will automatically manage and download required data.")
-        print("="*width + "\n")
-        
-        # Exit cleanly without a technical traceback
-        sys.exit(1)
-
-    # 3. SCIENTIFIC WORKFLOWS (Now guaranteed to have a data_root)
-    if mode == "configured":
-        from oscar._workflows import configured_runs
-        return configured_runs.run_configured(**kwargs)
-
-    if mode == "customized":
-        from oscar._workflows import customized_runs
-        return customized_runs.run_customized(**kwargs)
-
-    if mode == "advanced":
-        from oscar._workflows import advanced_runs
-        return advanced_runs.run_advanced(**kwargs)
-        
-    raise ValueError(f"Unknown mode: {mode}")
+def validate_project(project, experiment, data_dir=None):
+    """Check settings and optional forcing without downloads or simulation."""
+    from oscar._workflows.customized_runs import validate_project as validate
+    with use_data_dir(data_dir):
+        return validate(project, experiment)

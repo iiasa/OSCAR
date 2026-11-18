@@ -2,7 +2,7 @@ import yaml
 from oscar._io.paths import PACKAGE_ROOT
 
 def load_variable_names(
-    variable_path: str, section: str = "anthropogenic_emissions"
+    variable_path: str, section: str = "variables"
 ) -> list[str]:
     with open(variable_path, "r", encoding="utf-8-sig") as f:
         data = yaml.safe_load(f)

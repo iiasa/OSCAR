@@ -1,93 +1,56 @@
-"""
-OSCAR - Standard Workflow
-Description: Fast verification using bootstrap starter-kit.
-"""
-import xarray as xr
-from oscar._core._model.OSCAR import OSCAR
-from oscar._io.paths import INTERNAL_BOOTSTRAP_DIR, get_paths, PACKAGE_ROOT
+"""Bundled CMIP demonstration; no network or initialization required."""
+from pathlib import Path
+import json
+import numpy as np
+from oscar._io._download import Library, BOOTSTRAP_FILES, load_dataset
+from oscar._io.paths import INTERNAL_BOOTSTRAP_DIR, get_paths
 from oscar._utils.load_config import load_config
-from oscar._utils.metadata import apply_variable_metadata
-from oscar._viz import plot_timeseries_summary
+from oscar._utils.results import (combine_history, finish, output_path, check_overwrite,
+                                     result_prefix)
 
-def run_standard(show_plot=True, run_model=True, **kwargs):
-    # 1. Load instructions from YAML
-    cfg_full = load_config()
-    cfg = cfg_full['standard_mode']
-    registry = cfg_full['registry']
-    
-    # Resolve split year and range from the registry/mode
-    hist_type = cfg['hist_type']
-    hist_end_year = registry['hist_versions'][hist_type]['hist_end']
-    scen_start_year = registry['hist_versions'][hist_type]['scen_start']
-    run_end_year = cfg['run_range'][1]
-    
-    b_dir = INTERNAL_BOOTSTRAP_DIR
-    # add a fallback path if the user does not provide a data_dir
-    paths = get_paths()
-    if paths is None:
-        out_dir = PACKAGE_ROOT / "oscar_data" / "results" / "standard_run"
-    else:
-        out_dir = paths["results"] / "standard_run"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / "oscar_standard_results.nc"
 
-    if run_model:
-        # 2. Load the "Starter Kit" from internal package resources
-        print(f"Loading bootstrap data ({hist_type} baseline)...")
-        Par = xr.open_dataset(b_dir / "parameters_mc_standard.nc").load()
-        For = xr.open_dataset(b_dir / "forcing_scen_standard.nc").load()
-        Out_hist = xr.open_dataset(b_dir / "output_hist_standard.nc").load()
-        Ini = xr.open_dataset(b_dir / "scen_initial_state_standard.nc").load()
-        
-        # Slicing forcing based on the resolved years
-        For = For.sel(year=slice(scen_start_year, run_end_year))
-        
-        # 3. Run the model projection
-        print(f"Running OSCAR projection (Standard Mode)...")
-        Out_scen = OSCAR(Ini=Ini, Par=Par, For=For, nt=4)
-        
-        # Select variables defined in the standard_mode
-        vars_to_save = _flatten_list(cfg['var_select'])
+def _repair_legacy_labels(data):
+    """Known beta2 bootstrap format: parameters/history were ranked but scenario
+    forcing kept sorted prior IDs. Never apply this repair to external data."""
+    par, forcing = data['params'], data['forcing_scen']
+    if not np.array_equal(forcing.config.values, par.config.values):
+        if not (np.array_equal(par.config, np.arange(par.sizes['config']))
+                and forcing.sizes['config'] == par.sizes['config']
+                and np.all(np.diff(forcing.config.values) > 0)):
+            raise ValueError('Bundled demonstration has incompatible ensemble labels; reinstall OSCAR.')
+        data['forcing_scen'] = forcing.assign_coords(config=par.config)
+    return data
 
-        # Ensure historical results match the variable selection
-        Out_all = xr.concat([Out_hist[vars_to_save], Out_scen[vars_to_save]], dim='year', join='outer')
 
-        # 4. Apply Metadata Registration
-        print("Applying scientific metadata...")
-        Out_all = apply_variable_metadata(Out_all)
+def run_standard(show_plot=False, run_model=True, save=True, plot=True,
+                 output_dir=None, run_name=None, overwrite=False):
+    path = output_path('standard', output_dir, run_name, save, plot or show_plot,
+                       default_dir=get_paths()['results'] / 'standard')
+    if not run_model:
+        if path is None or not path.exists():
+            raise FileNotFoundError(f'No saved demonstration results at {path}. Run the demonstration first, '
+                                    'using the same output directory and run name, if any.')
+        out = load_dataset(path)
+        return finish(out, 'standard', json.loads(out.attrs.get('run_settings', '{}')), out.attrs['historical_end'],
+                      path, False, plot, show_plot, **_plot_options(path))
+    if save:
+        check_overwrite(path, overwrite)
+    cfg = load_config()['standard_mode']
+    # The bundle has no manifest; its identity comes from the package configuration.
+    lib = Library(INTERNAL_BOOTSTRAP_DIR, cfg['hist_type'], cfg['region'], files=BOOTSTRAP_FILES)
+    data = lib.prepare(variables=cfg['var_select'], repair=_repair_legacy_labels)
+    par, forcing = data['params'], data['forcing_scen']
+    print(f"[OSCAR] Demonstration: {par.sizes['config']} Monte Carlo members, "
+          f"{lib.hist_end + 1}–{int(forcing.year[-1])} projections.")
+    from oscar._core._model.OSCAR import OSCAR
+    projection = OSCAR(Ini=data['initial_state'], Par=par, For=forcing, nt=4, var_keep=cfg['var_select'])
+    out = combine_history(data['history'], projection, lib.hist_end, cfg['var_select'])
+    settings = {**lib.provenance(), 'scenarios': forcing.scen.values.tolist(), 'nt': 4,
+                'data_version': par.attrs.get('release_version', 'bundled-beta2-bootstrap')}
+    return finish(out, 'standard', settings, lib.hist_end, path, save, plot, show_plot, overwrite,
+                  **_plot_options(path))
 
-        # 5. Save results
-        Out_all.to_netcdf(out_file, engine="h5netcdf")
-        #print(f"Success! Data saved to: {out_file}")
-        
-    else:
-        # --- PLOT ONLY MODE ---
-        if not out_file.exists():
-            raise FileNotFoundError(f"No results found. Run with run_model=True first.")
-        Out_all = xr.open_dataset(out_file).load()
-        print(f"Loaded existing results from {out_file}")
 
-    # 6. Generate Summary Plots
-    plot_timeseries_summary(ds=Out_all, split_year=hist_end_year, var_list=[v for v in _flatten_list(cfg['var_select']) if v != 'D_Tg'],
-                             out_dir=out_dir, show_plot=False)
-    plot_timeseries_summary(ds=Out_all, split_year=hist_end_year, var_list=['D_Tg'],
-                            out_dir=out_dir, show_plot=show_plot)
-    
-    return Out_all, f'results saved to: {out_dir}'
-
-def _flatten_list(nested):
-    """Helper to handle YAML anchor nesting."""
-    flat = set()
-    for item in nested:
-        if isinstance(item, list):
-            flat.update(_flatten_list(item))
-        else:
-            flat.add(item)
-    return flat
-
-if __name__ == "__main__":
-    print("Running OSCAR Standard Workflow...")
-    Out_all, msg = run_standard()
-    print(Out_all)
-    print(msg)
-    
+def _plot_options(path):
+    """The demonstration plots only its configured variables, named after the results file."""
+    return {'plot_variables': load_config()['standard_mode']['plot_vars'], 'plot_prefix': result_prefix(path)}

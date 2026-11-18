@@ -22,7 +22,7 @@ name = 'land-albedo_Ouyang-2022'
 
 ## information on old biomes
 old_axis = 'biome'
-aggreg_biomes = {'Barren': 'Other', 
+aggreg_biomes = {'Barren': 'BareSoil', 
     'Cropland': 'Cropland', 
     'Forest': 'Forest', 
     'Grassland': 'Non-Forest', 
@@ -62,19 +62,23 @@ def precalib_params(mod_region, no_warnings=True):
             ds = xr.concat([ds, ds.sel({new_axis: missing_biomes[bio]}).assign_coords({new_axis: bio})], dim=new_axis)
 
         ## order biomes and axes
-        ds = ds.sel({new_axis: new_biomes_order})
+        ds = ds.sel({new_axis: new_biomes_order + ['BareSoil']})
         ds = ds.transpose('reg_land', new_axis, 'LC')
 
         ## initialization
         Par = xr.Dataset()
 
-        ## regional parameters
-        Par['ph_lcc'] = ds.RFalb / ds.Area
+        ## regional parameters (as a difference to bare soil)
+        Par['ph_lcc'] = (ds.RFalb / ds.Area) - (ds.RFalb / ds.Area).sel(bio_land='BareSoil', drop=True)
         Par['ph_lcc'].attrs['units'] = 'W m-2 Mha-1' 
-
+        
         ## ASSUMPTION: 
         ## choose actual LC first, and ideal LC second
         Par['ph_lcc'] = Par['ph_lcc'].sel(LC='actual', drop=True).combine_first(Par['ph_lcc'].sel(LC='ideal', drop=True))
+
+        ## cleanup dataset
+        Par = Par.sel({new_axis: new_biomes_order})
+        Par = Par.drop_vars('LC')
 
         ## print remaining NaN for info
         for var in Par:

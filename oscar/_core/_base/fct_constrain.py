@@ -6,7 +6,7 @@ import xarray as xr
 import operator as op
 import matplotlib.pyplot as plt
 
-from scipy.stats import norm, lognorm, skewnorm, qmc
+from scipy.stats import norm, lognorm, skewnorm, qmc, spearmanr
 from scipy.optimize import differential_evolution, least_squares
 
 
@@ -17,23 +17,54 @@ from scipy.optimize import differential_evolution, least_squares
 ## load constraints from yaml file
 def load_constraints_yaml(path):
     """
-    Example structures
+    Example structure
     ------------------
     constraints:
-      - name: D_Tg              # must be an OSCAR variable
+      - variable: D_Tg              # must be an OSCAR variable
         base: [1850, 1900]
         period: [2014, 2023]
         mean: 1.19
         std: 0.10
-      - name: D_CO2
+      - var: D_CO2
         distrib: lognormal
         period: [2023, 2023]
         pcts: {5: 130, 50: 141, 95: 152}
+      - variable: D_Tg               # same variable, another period -> needs a 'period_name'
+        period_name: 1990s           # else auto-named 'period1', 'period2', ...
+        base: [1850, 1900]
+        period: [1990, 1999]
+        mean: 0.55
+        std_eqn: 0.10/1.19*0.55
     """
+    
+    ## load file as list
     with open(path, 'r') as f:
         config = yaml.safe_load(f)
     constraints = [_format_constraint(c) for c in config['constraints']]
-    return {c['name']: c for c in constraints}
+
+    ## sort out names
+    ## default naming scheme
+    def _key(c):
+        return f"{c['name']}_{c['period_name']}" if c.get('period_name') else c['name']
+
+    ## count repeats
+    counts = {}
+    for c in constraints:
+        counts[_key(c)] = counts.get(_key(c), 0) + 1
+
+    ## make final dict
+    constraints_final, i_per_var = {}, {}
+    for c in constraints:
+        if counts[_key(c)] > 1 and 'period_name' not in c:
+            i_per_var[c['variable']] = i_per_var.get(c['variable'], 0) + 1
+            c['period_name'] = f"period{i_per_var[c['variable']]}"
+        name = _key(c)
+        if name in constraints_final:
+            raise ValueError(f"Duplicate constraint '{name}': give distinct 'period_name' values")
+        constraints_final[name] = c
+    
+    ## return
+    return constraints_final
 
 
 ## save a (possibly hand-crafted) set of constraints to a yaml file
@@ -246,7 +277,67 @@ def _fit_skewnormal_to_pcts(pcts, max_nfev=300, warn_tol=0.02, bounds=([-5, 1e-6
 ##   3. APPLY CONSTRAINING
 ##################################################
 
+##==========
+## Utilities
+##==========
+
+## convert constraints to xr.ds.attrs
+def _constraint_to_attrs(c):
+    attrs = {}
+    for k, v in c.items():
+        if v is None:
+            continue
+        if k == 'pcts':
+            attrs['pcts_q'] = np.array(list(v.keys()), dtype=float)
+            attrs['pcts_v'] = np.array(list(v.values()), dtype=float)
+        elif isinstance(v, bool):
+            attrs[k] = int(v)
+        elif isinstance(v, (list, tuple)):
+            attrs[k] = np.asarray(v)
+        else:
+            attrs[k] = v
+    return attrs
+
+
+## convert xr.ds.attrs to constraints
+def _constraint_from_attrs(attrs):
+    c = {}
+    for k, v in attrs.items():
+        if k in ('pcts_q', 'pcts_v'):
+            continue
+        if isinstance(v, np.ndarray):
+            v = v.tolist()
+        elif isinstance(v, np.generic):
+            v = v.item()
+        c[k] = bool(v) if k in ['skip'] else v
+    if 'pcts_q' in attrs:
+        c['pcts'] = dict(zip(np.atleast_1d(attrs['pcts_q']).tolist(), np.atleast_1d(attrs['pcts_v']).tolist()))
+    return c
+
+
+## get constraints from targets
+def _constraints_from_targets(targets):
+    return {name: _constraint_from_attrs(targets[name].attrs) for name in targets.data_vars}
+
+
+## get constraints that were actually used for the draws (skipped ones are kept as NaN)
+def _target_vars(targets):
+    return [v for v in targets.data_vars if not targets[v].attrs.get('skip', 0)]
+
+
+## resolve where constraints are provided
+def _resolve_constraints(constraints, targets):
+    if isinstance(constraints, (str, os.PathLike)):
+        return load_constraints_yaml(constraints)
+    if constraints is None:
+        if targets is None:
+            raise ValueError("Provide 'constraints', or a 'targets' dataset that carries them")
+        return _constraints_from_targets(targets)
+    return constraints
+
+
 ## get variable value over specified period and w.r.t. specified baseline
+## note: period=None (or missing) means time-independent variable, taken as is
 def _get_var_eval(da, base=None, period=None, time_axis='year',
     sum_dims=['reg_land', 'bio_land', 'bio_from', 'bio_to']):
     for dim in [dim for dim in da.dims if dim in sum_dims]: da = da.sum(dim, min_count=1)
@@ -261,16 +352,63 @@ def _mahalanobis_dist(x, mean, inv_cov):
     return np.sqrt(np.sum(diff @ inv_cov * diff, axis=1))
 
 
+## Spearman rank-correlation matrix
+def _spearman_corr(X):
+    d = X.shape[1]
+    if d == 1: return np.array([[1.]])
+    corr, _ = spearmanr(X)
+    if d == 2: corr = np.array([[1., corr], [corr, 1.]])
+    return np.atleast_2d(corr)
+
+
+## Iman-Conover method
+## note: reorders columns so the joint sample approximately matches the target correlation
+## note: does not alter any column, so marginals are preserved
+def _iman_conover(sample, target_corr, seed=None):
+    n, d = sample.shape
+    rng = np.random.default_rng(seed)
+    ref = rng.standard_normal((n, d)) @ np.linalg.cholesky(target_corr).T
+    out = np.empty_like(sample)
+    for j in range(d):
+        rank = np.argsort(np.argsort(ref[:, j]))
+        out[:, j] = np.sort(sample[:, j])[rank]
+    return out
+
+
+##==========
+## Main algo
+##==========
+
 ## main function to apply constraining and select ensemble members
-def apply_constraining(Out_prior, constraints, n_select, distribs=None, 
-    config_axis='config', time_axis='year', frac_mahalanobis=1.0, seed=None):
+def apply_constraining(Out_prior, constraints=None, n_select=None, distribs=None, 
+    targets=None, return_targets=False, 
+    config_axis='config', time_axis='year', draw_axis='draw', 
+    frac_mahalanobis=1.0, corr_shrinkage=1.0, seed=None):
     print(26*'=')
     print('---', 'APPLY CONSTRAINING', '---')
     print(26*'=')
 
+    ## get constraints (from arg, yaml path or targets dataset)
+    constraints = _resolve_constraints(constraints, targets)
+
     ## list constraints
-    skip_vars = [name for name, c in constraints.items() if c.get('skip', False)]
-    used_vars = [name for name in constraints if name not in skip_vars]
+    if targets is None:
+        skip_vars = [name for name, c in constraints.items() if c.get('skip', False)]
+        used_vars = [name for name in constraints if name not in skip_vars]
+        ## draw one seed if not provided
+        if seed is None:
+            seed = int(np.random.SeedSequence().generate_state(1)[0])  # 32-bit, so it is netcdf-safe
+        print('***', f'random seed: {seed}', '***')
+        if n_select is None:
+            raise ValueError("Provide 'n_select' (or a 'targets' dataset)")
+    else:
+        used_vars = _target_vars(targets)
+        skip_vars = [name for name in constraints if name not in used_vars]
+        n_select = targets.sizes[draw_axis]
+        seed = targets.attrs.get('seed')
+        missing = [v for v in used_vars if v not in constraints]
+        if missing:
+            raise ValueError(f'targets contain variables not in constraints: {missing}')
     n_constraints = len(used_vars)
 
     ## build distributions
@@ -282,7 +420,7 @@ def apply_constraining(Out_prior, constraints, n_select, distribs=None,
 
     ## get model results and format
     print('***', 'getting model outputs', '***')
-    Out_eval = xr.Dataset({name: _get_var_eval(Out_prior[name], base=c.get('base'), period=c.get('period'), time_axis=time_axis) for name, c in constraints.items()})
+    Out_eval = xr.Dataset({name: _get_var_eval(Out_prior[c['name']], base=c.get('base'), period=c.get('period'), time_axis=time_axis) for name, c in constraints.items()})
     X = Out_eval[used_vars].to_array(dim='_constraint').transpose(config_axis, '_constraint').values
 
     ## check and track members with any NaN (failed computations)
@@ -290,23 +428,56 @@ def apply_constraining(Out_prior, constraints, n_select, distribs=None,
     valid = ~np.isnan(X).any(axis=1)
     Out_eval = Out_eval.assign_coords(valid=(config_axis, valid))
 
-    ## LHS
-    print('***', 'Latin Hypercube sampling', '***')
-    sampler = qmc.LatinHypercube(d=n_constraints, seed=seed)
-    lhs_design = sampler.random(n=n_select)
-    real_space = np.column_stack([distribs[c].ppf(lhs_design[:, n]) for n, c in enumerate(used_vars)])
+    ## draw targets if not provided
+    if targets is None:
+
+        ## LHS
+        print('***', 'Latin Hypercube sampling', '***')
+        sampler = qmc.LatinHypercube(d=n_constraints, seed=seed)
+        lhs_design = sampler.random(n=n_select)
+        real_space = np.column_stack([distribs[c].ppf(lhs_design[:, n]) for n, c in enumerate(used_vars)])
+
+        ## use Iman-Conover method to reoder LHS
+        if n_constraints > 1:
+            print('***', 'Iman-Conover trick', '***')
+            if 0. <= corr_shrinkage <= 1.:
+                target_corr = _spearman_corr(X[valid])
+                target_corr = corr_shrinkage * target_corr + (1 - corr_shrinkage) * np.eye(n_constraints)
+            real_space = _iman_conover(real_space, target_corr, seed=seed)
+            achieved_corr = _spearman_corr(real_space)
+            ## keep diagnostics
+            Out_eval.attrs['corr_vars'] = used_vars
+            Out_eval.attrs['target_corr'] = target_corr
+            Out_eval.attrs['achieved_corr'] = achieved_corr
+
+        ## package the drawn targets
+        ## note: order matters because configs are matched sequentially
+        n_draw = real_space.shape[0]
+        draws = {c: real_space[:, n] for n, c in enumerate(used_vars)}
+        targets = xr.Dataset(
+            {name: (draw_axis, draws.get(name, np.full(n_draw, np.nan))) for name in constraints},
+            coords={draw_axis: np.arange(n_draw)})
+        for name, c in constraints.items():
+            targets[name].attrs = _constraint_to_attrs(c)
+        targets.attrs.update(seed=seed, n_select=int(n_select), 
+            frac_mahalanobis=float(frac_mahalanobis), corr_shrinkage=float(corr_shrinkage))
+    
+    ## otherwise use provided targets
+    else:
+        print('***', 'using provided targets (no sampling)', '***')
+        real_space = targets[used_vars].to_array(dim='_constraint').transpose(draw_axis, '_constraint').values
+    
+    ## save seed
+    if seed is not None: Out_eval.attrs['seed'] = seed
 
     ## covariations
     cov = np.atleast_2d(np.cov(real_space.T))
-    try:
-        inv_cov_ma = np.linalg.inv(cov)
-    except np.linalg.LinAlgError:
-        inv_cov_ma = np.eye(n_constraints)
+    inv_cov_ma = np.linalg.inv(cov)
     inv_cov_eu = np.eye(n_constraints)
 
     ## select configs
     print('***', 'selecting configurations', '***')
-    selected, used = [], []
+    selected, used, match_dist = [], [], []
     for real in real_space:
         available = np.array([i for i in range(X.shape[0]) if valid[i] and i not in used])
         if available.size == 0:
@@ -318,14 +489,41 @@ def apply_constraining(Out_prior, constraints, n_select, distribs=None,
         best_config = available[np.argmin(dist_combined)]
         selected.append(best_config)
         used.append(best_config)
+        match_dist.append(dist_combined.min())
+
+    ## track draw/config pairing as coordinates of targets
+    ## note: unmatched draws, if the pool ran out, get config -1 and NaN distance
+    n_draw = real_space.shape[0]
+    n_unmatched = n_draw - len(selected)
+    if n_unmatched:
+        print(f'Warning: pool exhausted, {n_unmatched} draws left unmatched')
+    matched_configs = Out_eval[config_axis].isel({config_axis: selected}).values
+    matched_configs = np.concatenate([matched_configs, np.full(n_unmatched, -1, dtype=matched_configs.dtype)])
+    matched_dist = np.concatenate([match_dist, np.full(n_unmatched, np.nan)])
+    targets = targets.drop_vars([v for v in (f'selected_{config_axis}', 'match_dist') if v in targets.coords])
+    targets = targets.assign_coords({f'selected_{config_axis}': (draw_axis, matched_configs), 'match_dist': (draw_axis, matched_dist)})
 
     ## return
-    return np.sort(Out_eval.config.isel({'config': selected}).values), Out_eval
+    selected = np.sort(Out_eval[config_axis].isel({config_axis: selected}).values)
+    if return_targets: return selected, Out_eval, targets
+    return selected, Out_eval
 
 
 ##################################################
 ##   4. DIAGNOSTICS & PLOTTING
 ##################################################
+
+## model values of the matched configs as xr.dataset
+def get_matched(Out_eval, targets, config_axis='config', draw_axis='draw'):
+    sel = targets[f'selected_{config_axis}']
+    sel = sel.where(sel >= 0, drop=True)  # drop unmatched draws
+    names = _target_vars(targets)
+    model = Out_eval[names].sel({config_axis: sel})
+    out = model.drop_vars('valid', errors='ignore')
+    for v in names:
+        out[f'{v}_target'] = targets[v].sel(draw=sel[draw_axis])
+    return out.assign_coords(match_dist=targets['match_dist'].sel(draw=sel[draw_axis]))
+
 
 ## quick summary print
 def print_constraining(Out_eval, constraints, selected, distribs=None, config_axis='config'):
@@ -365,8 +563,10 @@ def plot_constraining(Out_eval, constraints, selected, distribs=None, config_axi
     skip_vars = {c for c in names if constraints[c].get('skip', False)}
 
     ## layout
+    have_corr = 'target_corr' in Out_eval.attrs
+    n_panels = len(names) + (1 if have_corr else 0)
     panel_size = (3, 2.5)
-    nrows = int(np.ceil(len(names) / plot_ncols))
+    nrows = int(np.ceil(n_panels / plot_ncols))
     fig, axes = plt.subplots(nrows, plot_ncols, squeeze=False, figsize=(panel_size[0] * plot_ncols, panel_size[1] * nrows))
     axes_flat = axes.flatten()
 
@@ -377,6 +577,7 @@ def plot_constraining(Out_eval, constraints, selected, distribs=None, config_axi
         is_skipped = name in skip_vars
         prior = Out_eval[name].values[Out_eval['valid'].values] # take only valid configs
         post = Out_eval[name].sel({config_axis: selected}).values
+        prior, post = prior[np.isfinite(prior)], post[np.isfinite(post)] # drop NaNs (e.g. failed fits)
         units = constraints[name].get('units', '')
 
         ## histograms
@@ -407,8 +608,27 @@ def plot_constraining(Out_eval, constraints, selected, distribs=None, config_axi
         else:
             ax.set_title(f'{name} ({units})' if units else name, fontsize='medium')
 
+    ## correlation diagnostic panel
+    if have_corr:
+        ax = axes_flat[len(names)]
+        corr_vars = Out_eval.attrs['corr_vars']
+        target_corr = np.array(Out_eval.attrs['target_corr'])
+        achieved_corr = np.array(Out_eval.attrs['achieved_corr'])
+        n = len(corr_vars)
+        combined = np.triu(target_corr, 1) + np.tril(achieved_corr, -1) + np.eye(n)
+        im = ax.imshow(combined, vmin=-1, vmax=1, cmap='coolwarm')
+        for i in range(n):
+            for j in range(n):
+                if i != j:
+                    ax.text(j, i, f'{combined[i, j]:.2f}'.replace("-0.", "-.").replace("0.", "."), ha='center', va='center', fontsize=5)
+        ax.set_xticks(range(n)); ax.set_xticklabels(corr_vars, rotation=70, fontsize='xx-small')
+        ax.set_yticks(range(n)); ax.set_yticklabels(corr_vars, fontsize='xx-small')
+        ax.set_title('target corr (upper) vs achieved corr (lower)', fontsize='small')
+        cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(labelsize='small')
+
     ## hide unused axes
-    for ax in axes_flat[len(names):]:
+    for ax in axes_flat[n_panels:]:
         ax.axis('off')
 
     ## shared legend
@@ -425,21 +645,23 @@ def plot_constraining(Out_eval, constraints, selected, distribs=None, config_axi
 ##################################################
 
 ## wrapper for constraining pipeline
-def constraining_pipeline(Out_prior, constraints, n_select, 
+def constraining_pipeline(Out_prior, constraints=None, n_select=None, 
+    targets=None, return_targets=False, 
     config_axis='config', time_axis='year', 
-    frac_mahalanobis=1.0, seed=None, 
+    frac_mahalanobis=1.0, corr_shrinkage=1.0, seed=None, 
     plot_ncols=4, save_figure=None):
 
-    ## read file if path provided (assumes yaml)
-    if isinstance(constraints, (str, os.PathLike)):
-        constraints = load_constraints_yaml(constraints)
+    ## get constraints (from arg, yaml path or targets dataset)
+    constraints = _resolve_constraints(constraints, targets)
 
     ## build distribs once
     distribs = build_distribs(constraints)
 
     ## apply
-    selected, Out_eval = apply_constraining(Out_prior, constraints, n_select, distribs=distribs, 
-        config_axis=config_axis, time_axis=time_axis, frac_mahalanobis=frac_mahalanobis, seed=seed)
+    selected, Out_eval, targets = apply_constraining(Out_prior, constraints, n_select, distribs=distribs, 
+        targets=targets, return_targets=True, 
+        config_axis=config_axis, time_axis=time_axis, 
+        frac_mahalanobis=frac_mahalanobis, corr_shrinkage=corr_shrinkage, seed=seed)
 
     ## print
     print_constraining(Out_eval, constraints, selected, distribs=distribs, 
@@ -452,4 +674,6 @@ def constraining_pipeline(Out_prior, constraints, n_select,
         plt.savefig(save_figure, dpi=200)
 
     ## return
+    if return_targets: return selected, Out_eval, targets
     return selected, Out_eval
+

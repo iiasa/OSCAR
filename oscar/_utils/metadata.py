@@ -8,17 +8,14 @@ international reporting standards (CF-Conventions).
 """
 
 import yaml
+from oscar._version import get_version
 from oscar._io.paths import PACKAGE_ROOT
 
 def get_oscar_version():
     """
     Reads the dynamic version from the VERSION file in the package root.
     """
-    version_path = PACKAGE_ROOT / "VERSION"
-    if version_path.exists():
-        with open(version_path, "r", encoding="utf-8") as f:
-            return f.read().strip()
-    return "unknown"
+    return get_version()
 
 def load_var_registry():
     """

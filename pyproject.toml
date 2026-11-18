@@ -2,6 +2,8 @@
 name = "oscar"
 dynamic = ["version"]
 description = "OSCAR Earth system model"
+readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.9"
 dependencies = [
   "numpy",
@@ -34,4 +36,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["oscar", "dev"] #for developer version
+packages = ["oscar"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"VERSION" = "oscar/VERSION"
+
+[tool.pytest.ini_options]
+testpaths = ["oscar_data/tests"]
+cache_dir = "oscar_data/.pytest_cache"  # keep the repository root clean
+python_files = ["test_*.py"]  # smoke_test.py and run_test_core.py are manual scripts

@@ -59,7 +59,7 @@ def get_params(nice_rounding=True, **useless):
 
     ## hv lifetime sensitivities
     ## TODO: add solar?
-    ## (Prather et al., 2005; https://doi.org/10.1002/2015JD023267)
+    ## (Prather et al., 2015; https://doi.org/10.1002/2015JD023267)
     ## note: taking opposite values because sensivity of v = 1/tau
 
     ## sensitivity to N2O

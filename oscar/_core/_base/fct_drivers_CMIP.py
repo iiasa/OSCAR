@@ -6,7 +6,7 @@ from oscar._core._base.fct_regions import aggreg_regions
 
 
 ##################################################
-##   1. GENERIC FORMATTING
+##   1. DATASET SPECIFIC FORMATTING
 ##################################################
 
 ## function to format LUH for OSCAR
@@ -221,13 +221,13 @@ def format_CMIP_conc(ds_in, conc_pi=None, t_lag=None,
         For['Xhalo_lag_pd'].attrs['years'] = years_dict[spc]
 
 
-    ## Delta forcings and derivative
+    ## Delta forcings
     for var in [var for var in For if not var.endswith('_pi') and not var.endswith('_pd')]:
         For['D_'+var] = For[var] - For[f'{var}_pi']
         For['D_'+var].attrs['units'] = For[var].units
-        #For = For.drop_vars(var)
 
-    ## derivatives
+
+    ## Derivatives
     for var in [var for var in For if var.startswith('D_')]:
         ## init
         For[var.replace('D_', 'd_')] = np.nan * For[var]
@@ -241,12 +241,13 @@ def format_CMIP_conc(ds_in, conc_pi=None, t_lag=None,
         For[var.replace('D_', 'd_')].attrs['units'] = For[var].units + ' yr-1'
         For = For.drop_vars(var.replace('D_', ''))
 
+
     ## return 
     return For
 
 
 ##################################################
-##   2. WRAPPERS TO GET STANDARD FORCINGS
+##   2. WRAPPER TO GET STANDARD FORCINGS
 ##################################################
 
 ## get CMIP6/7 drivers for historical and scenarios
@@ -255,11 +256,14 @@ def get_CMIP_drivers(mod_region, CMIP='CMIP7', year_end=2300):
 
     ## get proper CMIP data
     if CMIP == 'CMIP7':
-        year_hist = 2023
+        year_hist = 2022 # officially 2022, but 2023 works
         ds_conc = load_data('concentrations_CMIP7.')
         ds_emis = aggreg_regions(load_data('emissions_CMIP7.'), mod_region)
         ds_land = aggreg_regions(load_data('land-use_LUH3.'), mod_region)
         ds_forc = load_data('radiative-forcing_RCMIP3.')
+        ds_forc = ds_forc.sel(scen=[scen for scen in ds_forc.scen.values if ds_forc.scen_group.sel(scen=scen) == 'cmip7'])
+        ds_forc['scen'] = ['hist' if 'hist' in scen else scen for scen in ds_forc.scen.values]
+        ds_forc['ERF_aic'] = ds_forc['ERF_aic'].fillna(0.) # hopefully temporary
     elif CMIP == 'CMIP6':
         year_hist = 2014
         ds_conc = load_data('concentrations_CMIP6.')
@@ -318,6 +322,7 @@ def get_CMIP_drivers(mod_region, CMIP='CMIP7', year_end=2300):
     ## format input
     ds_tmp = _format_years(ds_forc, year_hist)
     ds_tmp = ds_tmp.drop_vars([var for var in ds_forc if var not in ['ERF_aic', 'ERF_irrig', 'ERF_solar', 'ERF_volc']])
+    ds_tmp = ds_tmp.fillna(0.)
     ## assign
     for var in ds_tmp: For[var] = ds_tmp[var]
 
@@ -339,7 +344,7 @@ def get_CMIP_drivers(mod_region, CMIP='CMIP7', year_end=2300):
     For['H2_pd'] = xr.DataArray(536.2, attrs={'units': 'ppb'}) # this one we want!
 
 
-    ## SPECIFIC STEPS
+    ## MISSING VARIABLES
     if CMIP == 'CMIP7':
         for var in ['D_CO2', 'D_CH4', 'D_N2O', 'D_Xhalo'] + ['d_CO2', 'd_CH4', 'd_N2O', 'd_Xhalo']: 
             For[var].loc[{'year': year_hist, 'scen': 'hist'}] = For[var].sel(year=year_hist).mean('scen') # identical in all scenarios

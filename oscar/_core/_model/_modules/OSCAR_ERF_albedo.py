@@ -30,8 +30,8 @@ OSCAR_ERF_albedo.process(
 
 def Eq__ERF_lap(Var, Par):
     ## split BB emissions
-    D_Ebb1 = Var.D_Ebb_BC
-    D_Ebb2 = Var.D_Ebb2_BC if 'D_Ebb2_BC' in Var else 0. * D_Ebb1
+    D_Ebb1 = 1. * Var.D_Ebb_BC
+    D_Ebb2 = 1. * Var.D_Ebb2_BC if 'D_Ebb2_BC' in Var else 0. * D_Ebb1
     if 'reg_land' not in D_Ebb1.dims and 'reg_land' in D_Ebb2.dims: 
         D_Ebb1 -= D_Ebb2.sum('reg_land', min_count=1)
     elif 'reg_land' in D_Ebb1.dims and 'reg_land' not in D_Ebb2.dims: 
@@ -62,10 +62,11 @@ def Eq__ERF_lcc(Var, Par):
 ## land use change (including irrigation)
 OSCAR_ERF_albedo.process(
     Out = 'ERF_luc', 
-    In = ('ERF_lcc', 'ERF_irrig'), 
+    In = ('ERF_lcc',), 
+    In2 = ('ERF_irrig',),
     Eq = lambda Var, Par: Eq__ERF_luc(Var, Par), 
     units = 'W m-2')
 
 def Eq__ERF_luc(Var, Par):
-    return Var.ERF_lcc + Var.ERF_irrig
+    return Var.ERF_lcc + (Var.ERF_irrig if 'ERF_irrig' in Var else 0.)
 

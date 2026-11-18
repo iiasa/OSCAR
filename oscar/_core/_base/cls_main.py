@@ -353,9 +353,10 @@ class Model():
             for var in list_var_diag:
                 Var_old[var] = self[var](Var_old, Par, For.sel({time_axis: time[0]}, drop=True))
 
-            ## initialization of kept variables
+            ## initialization of kept variables (and previous time step)
             Var_out = Var_old.drop([var for var in Var_old if var not in list_var_keep])
             Var_out = [Var_out.assign_coords(**{time_axis: time[0]}).expand_dims(time_axis, 0)]
+            Var_prev = Var_out[0].sel({time_axis: time[0]}, drop=True)
 
             ## LOOP ON TIME-STEP
             for t in range(1, len(time)):
@@ -374,9 +375,9 @@ class Model():
                 dt = float(time[t] - time[t-1]) / float(steps[t])
                 For_t = For.sel({time_axis: time[t]}, drop=True)
 
-                ## anticipate new output (initialized to zero)
-                Var_out.append(0 * Var_out[-1].isel({time_axis: 0}, drop=True))
-
+                ## anticipate new output
+                Var_out.append(0.5/float(steps[t]) * Var_prev) # half the value of the starting point
+                    
                 ## LOOP ON SUBSTEPS
                 print('(nt = ' + str(int(steps[t])) +')', end='\n' if t+1==len(time) else '\r')
                 for tt in range(int(steps[t])):
@@ -398,10 +399,13 @@ class Model():
                         if t+1 == len(time) and tt+1 == int(steps[t]):
                             Var_fin = Var_new.drop([var for var in Var_new if var not in list_var_prog + list_var_node])
 
-                    ## drop unwanted variables and add to new output
+                    ## drop unwanted variables and keep others
                     Var_new = Var_new.drop([var for var in Var_new if var not in list_var_keep])
-                    Var_out[-1] += float(1/steps[t]) * Var_new # this gives mid-year values
-                    #Var_out[-1] = Var_new # this would give end-of-year values
+                    if tt+1 == int(steps[t]): 
+                        Var_out[-1] += 0.5/float(steps[t]) * Var_new # half the value of the final point
+                        Var_prev = Var_new # keep for next time step
+                    else:
+                        Var_out[-1] += 1/float(steps[t]) * Var_new # full value if intermediate point
 
                 ## assign time coordinate
                 Var_out[-1] = Var_out[-1].assign_coords(**{time_axis: time[t]}).expand_dims(time_axis, 0)

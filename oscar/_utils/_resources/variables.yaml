@@ -13,7 +13,7 @@
 # 3. Maintainability: Non-Python experts can update variable descriptions 
 #    without risking bugs in the numerical solver.
 # 
-# Format: code_name: {sci_name: "Symbol", long_name: "Full Name", unit: "Unit"}
+# Format: code_name: {sci_name: "Symbol", latex_name: "Latex Code", long_name: "Full Name", unit: "Unit"}
 # ==============================================================================
 
 variables:

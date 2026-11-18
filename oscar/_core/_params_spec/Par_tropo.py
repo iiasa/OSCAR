@@ -86,7 +86,7 @@ def get_params(nice_rounding=True, **useless):
     Par.coords['mod_ch_OH_nat'] = ['UKESM1', 'GFDL-ESM4', 'CESM2-WACCM', 'GISS-E2-1']
     Par['ch_OH_BVOC'] = xr.DataArray(-np.log1p(np.array([0.033E-2, 0.030E-2, 0.035E-2, 0.018E-2]) * np.array([757.353, 483.505, 679.01, 1193.06])) / np.log(2.), 
         dims='mod_ch_OH_nat', attrs={'units': '1'})
-    Par['ch_OH_LNOX'] = xr.DataArray(-np.log1p(np.array([-2.4E-2, -3.8E-2, -6.8E-2, -6.1E-2]) * np.array([7.46, 3.93, 6.49, 3.81])) / np.log(2.), 
+    Par['ch_OH_LNOx'] = xr.DataArray(-np.log1p(np.array([-2.4E-2, -3.8E-2, -6.8E-2, -6.1E-2]) * np.array([7.46, 3.93, 6.49, 3.81])) / np.log(2.), 
         dims='mod_ch_OH_nat', attrs={'units': '1'})
     ## turn into distribution (manually for nice rounding)
     if nice_rounding:

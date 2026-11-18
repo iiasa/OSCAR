@@ -4,7 +4,7 @@ We are excited to announce the release of **OSCAR v4**! OSCAR is an open-source,
 
 > [!IMPORTANT]
 > ### ⚠️ Beta Version - Active Development
-> This package is currently in **Beta (v4-beta2)**. We are actively refining features and documentation.
+> This package is currently in **Beta (v4-beta3)**. We are actively refining features and documentation.
 >
 > We expect a stable v4.0 by the end of 2026.
 > 
@@ -72,57 +72,62 @@ You can both **inspect** a mode and **execute** it from the Terminal or Python.
 | **General** | Package overview & guidance | `oscar` | `oscar.info()` | — | — | ✅ Available |
 | **Standard** | Instant verification simulation | `oscar info standard` | `oscar.info("standard")` | `oscar run` | `oscar.run()` | ✅ Available |
 | **Configured** | Official scenario library runs | `oscar info configured` | `oscar.info("configured")` | `oscar run -m configured` | `oscar.run(mode="configured")` | ✅ Available |
-| **Customized** | User-defined research workflows | — | `oscar.info("customized")` | — | `oscar.run(mode="customized")` | ✅ Available |
-| **Advanced** | Core model development | — | — | — | `oscar.run(mode="advanced")` | 🚧 In Development |
+| **Customized** | User-defined research workflows | `oscar info customized` | `oscar.info("customized")` | `oscar run -m customized --project <project-id> --experiment <experiment-id>` | `oscar.run(mode="customized", project=..., experiment=...)` | ✅ Available |
+| **Advanced** | Run options for close collaborators | `oscar info advanced` | `oscar.info("advanced")` | — | — | 🔒 On request |
 
-> **Note:** Scientific modes (Configured and above) require access to a large data library.  
-> The model will guide you through a one-time directory initialization on first use.
+> **Note:** Configured and Customized modes download their data library on first use.
 
 ---
 
 ## 🛠 Usage Examples
 
 ### Terminal (Standard Mode)
-Run the 2024-2100 verification simulation with a single command:
+Run the verification simulation with a single command:
 ```bash
 oscar run
 ```
 
 ### Python (Configured Mode)
-Run a specific CMIP7 regional projection for multiple SSP scenarios:
+Run CMIP7 scenarios from the official library (projections to 2100):
 ```python
 import oscar
 
-# Run official scenarios for the 5 RCP regions
+# CMIP7 history and IAMC_R5 regions by default; see oscar.info("configured") for the options
 oscar.run(
-    mode="configured", 
-    scenario=["scen7-VL","scen7-H"], 
+    mode="configured",
+    scenario=["scen7-VL", "scen7-H"],
     variables=["D_Tg"]
 )
 ```
-### Python (Customized Mode)
-Run user defined scenarios
+### Customized Mode
+Run your own scenarios on top of a baseline scenario:
 
-**Preparation:** 
+1. Create a project with its first experiment; this downloads the templates and
+   examples on first use:
+   ```bash
+   oscar project my-project --experiment my-experiment
+   ```
+   This creates the project folder (its path is printed) with
+   `settings_my-experiment.yaml`, `INFO.md`, `inputs/` and `results/`.
+2. Put your inputs in `inputs/` and edit `settings_my-experiment.yaml`. Without
+   inputs, the baseline scenario runs alone.
+3. Check, then run:
+   ```bash
+   oscar validate my-project --experiment my-experiment
+   oscar run -m customized --project my-project --experiment my-experiment
+   ```
+   Alternatively, use Python instead of the terminal steps:
+   ```python
+   import oscar
 
-0. Download Templates: Look for `setting_template.yaml`
+   oscar.create_project("my-project", experiment="my-experiment")
+   oscar.validate_project("my-project", "my-experiment")
+   oscar.run(mode="customized", project="my-project", experiment="my-experiment")
+   ```
 
-1. Create Project Folder : `oscar.create_project('my-project')`
-    - (optional) put user forcing in this project folder (if empty, model will run with baseline scenarios)
-    - modify the setting file: `setting_my-experiment.yaml`
-
-2. Run Simulation with: 
-```python
-import oscar
-
-# Run user-defined scenarios
-oscar.run(
-    mode="customized", 
-    project='my-project', 
-    experiment='my-experiment'
-)
-```
-**Note:** run `oscar.info('customized')` for detailed information.
+Results go to the project's `results/`. A second experiment in the same project:
+`oscar project my-project --experiment another-experiment`. See `INFO.md` in the
+project, or `oscar.info("customized")`, for all options and input rules.
 
 ---
 

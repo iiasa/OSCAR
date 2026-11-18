@@ -2,16 +2,12 @@
 OSCAR Visualization Module
 Time-series plotting for global variables.
 """
-import sys
-import subprocess
 import numpy as np
 import xarray as xr
-import matplotlib
-matplotlib.use('Agg')  # set before importing pyplot, or at the very top of the script, to avoid issues on plots being shown twice
 import matplotlib.pyplot as plt
 import warnings
 
-def plot_timeseries_summary(ds, split_year, var_list, out_dir, show_plot=True):
+def plot_timeseries_summary(ds, split_year, var_list, out_dir, show_plot=True, prefix='plot'):
     """
     Plots historical vs scenario time-series with professional scientific titles.
     Format: Long Name | Sci Name | Var Name [Unit]
@@ -98,11 +94,10 @@ def plot_timeseries_summary(ds, split_year, var_list, out_dir, show_plot=True):
         plt.grid(True, alpha=0.3)
 
         # 6. Save and Close
-        plot_file = out_dir / f"plot_{var}.png"
+        plot_file = out_dir / f"{prefix}_{var}.png"
         if show_plot:
             plt.savefig(plot_file, dpi=150, bbox_inches='tight')
-            if sys.platform == 'darwin':
-                subprocess.run(['open', str(plot_file)])
+            plt.show()
         else:
             plt.savefig(plot_file, dpi=150, bbox_inches='tight')
 

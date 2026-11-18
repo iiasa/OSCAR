@@ -79,7 +79,7 @@ OSCAR_CO2.process(
     units = 'PgC yr-1')
 
 def Eq__Eimb_CO2(Var, Par):
-    return Par.a_CO2 * Var.d_CO2 - (sum_reg(Var.D_Eff) + sum_reg(Var.D_Eluc) - Var.D_Fsink_CO2 + Var.D_Emiss_CO2)
+    return Par.a_CO2 * Var.d_CO2 - (sum_reg(Var.D_Eff) + sum_reg(Var.D_Eluc) + Var.D_Foxi_CH4 - Var.D_Fsink_CO2 + Var.D_Emiss_CO2)
 
 
 ## airborne fraction
@@ -94,6 +94,7 @@ def Eq__AF(Var, Par):
 
 
 ## carbon sinks rate
+## (Raupach et al., 2014; https://doi.org/10.5194/bg-11-3453-2014)
 OSCAR_CO2.process(
     Out = 'kS', 
     In = ('D_CO2', 'D_Fsink_CO2'), 

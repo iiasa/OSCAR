@@ -1,193 +1,309 @@
-"""
-OSCAR Help Utility
-Location: oscar/_utils/help.py
+"""Compact, readable discovery pages for OSCAR's user workflows."""
+from itertools import zip_longest
+from pathlib import Path
+from textwrap import fill, wrap
 
-Provides contextual information about run modes, official scientific 
-scenarios, and regional configurations.
-"""
-from .load_config import load_config
+import xarray as xr
 
-def show_info(mode=None):
-    """Router for the OSCAR information system."""
-    cfg_full = load_config()
-    
-    # Normalize mode string
-    m = str(mode).lower() if mode else None
+from oscar._io.paths import INTERNAL_BOOTSTRAP_DIR, get_paths
+from oscar._utils.load_config import load_config
+from oscar._utils.metadata import load_var_registry
 
-    if m is None or m == 'none':
-        _print_general()
-    elif m == 'standard':
-        _print_standard(cfg_full)
-    elif m == 'configured':
-        _print_configured(cfg_full)
-    elif m == 'customized':
-        _print_customized(cfg_full)
-    elif m == 'advanced':
-        _print_advanced()
+WIDTH = 88
+LABEL = 9
+SECOND_COLUMN = 38
+
+
+def format_run_help():
+    """Task-first terminal help, without the parser's implementation details."""
+    width = 104
+    lines = [
+        '', '=' * width, 'RUN OSCAR'.center(width).rstrip(), '=' * width, '',
+        f"  {'What would you like to run?':<38}  {'Mode':<12}  Command",
+        '  ' + '-' * (width - 4),
+    ]
+    for task, mode, command in (
+        ('A demonstration', 'Standard', 'oscar run'),
+        ('An available CMIP scenario', 'Configured', 'oscar run -m configured -s scen7-VL'),
+        ('An experiment with your own forcing', 'Customized',
+         'oscar run -m customized --project <project-id> \\\n  --experiment <experiment-id>'),
+    ):
+        first, *rest = command.split('\n')
+        lines.append(f'  {task:<38}  {mode:<12}  {first}')
+        lines.extend(f"  {'':<38}  {'':<12}  {line}" for line in rest)
+    lines.extend([
+        '', '  Learn more about each mode', '  ' + '-' * (width - 4),
+        '  Standard   : oscar info standard',
+        '  Configured : oscar info configured',
+        '  Customized : oscar info customized',
+        '=' * width,
+    ])
+    return '\n'.join(lines)
+
+
+def _heading(title):
+    print('\n' + '=' * WIDTH)
+    print(title.center(WIDTH).rstrip())
+    print('=' * WIDTH)
+
+
+def _end(note=None):
+    if note:
+        _text(note)
+    print('=' * WIDTH + '\n')
+
+
+def _text(text):
+    print(fill(text, width=WIDTH, initial_indent='  ', subsequent_indent='  ',
+               break_long_words=False, break_on_hyphens=False))
+
+
+def _field(label, value):
+    prefix = f'  {label:<{LABEL}} : ' if label else ' ' * (LABEL + 5)
+    print(fill(str(value), width=WIDTH, initial_indent=prefix,
+               subsequent_indent=' ' * len(prefix), break_long_words=False,
+               break_on_hyphens=False))
+
+
+def _pair(left, right):
+    left_label, left_value = left
+    right_label, right_value = right
+    first = f'  {left_label:<{LABEL}} : {left_value}'
+    # The right-hand labels and colons start at fixed columns on every row.
+    print(f'{first:<{SECOND_COLUMN}}{right_label:<11} : {right_value}')
+
+
+def _section(title):
+    print(f'\n  {title}')
+    print('  ' + '-' * (WIDTH - 4))
+
+
+def _cell(value, width):
+    lines = []
+    for line in str(value).splitlines() or ['']:
+        indent = len(line) - len(line.lstrip())
+        lines.extend(wrap(line, width=width, subsequent_indent=' ' * indent,
+                          break_long_words=False, break_on_hyphens=False) or [''])
+    return lines
+
+
+def _table(rows, headers=('Action', 'Terminal', 'Python (import oscar)'), widths=(21, 25, 36)):
+    print()
+    if len(headers) == 2:
+        print(f'  {headers[0]:<{widths[0]}}  {headers[1]}')
     else:
-        print(f"\n[!] Unknown mode: '{mode}'")
-        print("Available modes are: 'standard', 'configured', 'customized', 'advanced'")
-
-def _print_general():
-    """Displays general overview and entry points for OSCAR."""
-    width = 105
-    print("\n" + "=" * width)
-    print(f"{'OSCAR MODEL - GENERAL OVERVIEW':^105}")
-    print("=" * width)
-    print(f"{'A reduced-complexity Earth system model for climate research.':^105}")
-
-    print("\nAvailable Run Modes ([T] = Terminal, [P] = Python):")
-
-    # Column Width Definitions
-    mode_w = 10
-    desc_w = 30
-    term_w = 25
-
-    print(f"  {'standard':<{mode_w}} : {'Fast verification (no setup).':<{desc_w}} | "f"{'[T] oscar info standard':<{term_w}} | [P] oscar.info('standard')")
-    print(f"  {'configured':<{mode_w}} : {'Official CMIP runs.':<{desc_w}} | "f"{'[T] oscar info configured':<{term_w}} | [P] oscar.info('configured')")
-    print(f"  {'customized':<{mode_w}} : {'User-defined research.':<{desc_w}} | "f"{'[T] oscar info customized':<{term_w}} | [P] oscar.info('customized')")
-    print(f"  {'advanced':<{mode_w}} : {'[DEV] Advanced features.':<{desc_w}} | "f"{'(Status: Under Development)':^53} ")
-
-    print("=" * width + "\n")
-
-def _print_standard(cfg_full):
-    """Displays information for the Standard verification mode."""
-    cfg = cfg_full['standard_mode']
-    width = 90
-    print("\n" + "="*width)
-    print(f"{'MODE: STANDARD (Verification)':^90}")
-    print("="*width)
-    print("Goal:        Fast proof-of-concept run for the model installation.")
-    print(f"Data source: Internal package bootstrap ({cfg['nMC']} members).")
-    print(f"Timeline:    {cfg['run_range'][0]} to {cfg['run_range'][1]}.")
-    print(f"History:     {cfg['hist_type']}")
-    print(f"Region:      Fixed ({cfg['region']}).")
-    
-    print("\nExample Commands:")
-    print("  [Terminal] : oscar run")
-    print("  [Python]   : import oscar; oscar.run()")
-    print("="*width + "\n")
-
-def _print_configured(cfg_full):
-    """Displays official scientific library options."""
-    from oscar._io.paths import PACKAGE_ROOT
-    from oscar._utils.metadata import load_var_registry
-
-    var_path = (PACKAGE_ROOT / "oscar" / "_utils" / "_resources" / "variables.yaml")
-
-    cfg = cfg_full['configured_mode']
-    reg = cfg_full.get("registry", {})
-    defaults = cfg.get("defaults", {})
-
-    width = 105
-    print("\n" + "="*width)
-    print(f"{'MODE: CONFIGURED (Scientific Library)':^105}")
-    print("="*width)
-    print("Official scientific experiments using curated forcing and parameter libraries.")
-    
-    print("\nAvailable Options :")
-    print(f"  {'Histories':<12} : {', '.join(cfg['allowed_hist'])}")
-    print(f"  {'Regions':<12} : {', '.join(cfg['allowed_regions'])}")
-
-    # --- CMIP6 & CMIP7 Scenarios ---
-    all_scens = reg.get("all_scens", {})
-    cmip6_scens = all_scens.get("scen6", [])
-    cmip7_scens = all_scens.get("scen7", [])
-
-    if cmip6_scens:
-        print(f"  {'CMIP6 Scen':<12} : {', '.join(cmip6_scens)}")
-    if cmip7_scens:
-        print(f"  {'CMIP7 Scen':<12} : {', '.join(cmip7_scens)}")
-    
-    # --- Output Variables & Core Metadata Lookup ---
-    var_meta = load_var_registry()
-    v_core = reg.get("v_core", [])
-
-
-    print(f"  {'Output Vars':<12} : Full list in {var_path}")
-    print(f"{'':<17}[ Core Variables: ]")
-
-    for var in v_core:
-        meta = var_meta.get(var, {})
-        desc = meta.get("long_name", "Core variable")
-        unit = meta.get("unit", "")
-        unit_str = f" [{unit}]" if unit else ""
-        print(f"{'':<15}  - {var:<10}: {desc}{unit_str}")
-
-    #print(f"  {'MC Ensemble':<12} : {cfg.get('official_nMC', 'N/A')} members (Pre-validated)")
-
-    # --- Extract Dynamic Example Options from Config ---
-    ex_scen = defaults.get("scenario", ["scen7-VL"])
-    ex_scen = ex_scen[0] if isinstance(ex_scen, list) else ex_scen
-
-    ex_reg = defaults.get("region", "IAMC_R5")
-    ex_reg = ex_reg[0] if isinstance(ex_reg, list) else ex_reg
-
-    ex_var = defaults.get("var_select", ["D_Tg"])
-    ex_var = ex_var[0] if isinstance(ex_var, list) else ex_var
-
-    print("\nExample Commands:")
-    print(f"  [Terminal] : oscar run -m configured -s {ex_scen} -r {ex_reg} -v {ex_var}")
-    print(f"  [Python]   : oscar.run(mode='configured', scenario='{ex_scen}', variables=['{ex_var}'])")
-
-    print("=" * width + "\n")
-
-def _print_customized(cfg_full):
-    """Displays instructions for research mode (Tier 2)."""
-    cfg = cfg_full['customized_mode']
-    width = 95
-    print("\n" + "="*width)
-    print(f"{'MODE: CUSTOMIZED (User Research)':^95}")
-    print("="*width)
-    print("Run OSCAR with custom experimental forcing and extended horizons.")
-    
-    print("\n[ SCIENTIFIC BOUNDARIES ]")
-    y_min = cfg['allowed_years']['min']
-    y_max = cfg['allowed_years']['max']
-    print(f"  {'Timeline':<17}: {y_min} to {y_max}")
-    print(f"  {'Supported Hist':<17}: {', '.join(cfg['allowed_hist'])}")
-    print(f"  {'Output Regions':<17}: {', '.join(cfg['allowed_regions'])}")
-    print(f"  {'Baseline Forcing':<17}: ")
-    print(f"  {'    - CMIP6' }[{', '.join(cfg_full['registry']['all_scens']['scen6'])}]")
-    print(f"  {'    - CMIP7' }[{', '.join(cfg_full['registry']['all_scens']['scen7'])}]")
-
-    print("\n[ OUTPUT THEMES ]")
-    themes = cfg['output_themes']
-    for theme, raw_variables in themes.items():
-        if isinstance(raw_variables, list):
-            # --- FIX: FLATTEN THE THEME LIST ---
-            flat_theme_vars = []
-            for item in raw_variables:
-                if isinstance(item, list):
-                    flat_theme_vars.extend(item)
-                else:
-                    flat_theme_vars.append(item)
-            # -----------------------------------
-            var_str = ", ".join(flat_theme_vars)
+        print(f'  {headers[0]:<{widths[0]}}  {headers[1]:<{widths[1]}}  {headers[2]}')
+    print('  ' + '-' * (WIDTH - 4))
+    for action, terminal, python in rows:
+        if python is None:
+            # Instructions such as adding a file apply to both interfaces.
+            cells = [_cell(action, widths[0]), _cell(terminal, WIDTH - widths[0] - 6)]
+            for left, instruction in zip_longest(*cells, fillvalue=''):
+                print(f'  {left:<{widths[0]}}  {instruction}'.rstrip())
         else:
-            var_str = "(User-defined selection)"
-        print(f"  - {theme:<15}: {var_str}")
+            cells = [_cell(value, width) for value, width in zip((action, terminal, python), widths)]
+            for left, middle, right in zip_longest(*cells, fillvalue=''):
+                print(f'  {left:<{widths[0]}}  {middle:<{widths[1]}}  {right}'.rstrip())
+    print('  ' + '-' * (WIDTH - 4))
 
-    from oscar._io.paths import PACKAGE_ROOT
-    var_path = (PACKAGE_ROOT / "oscar" / "_utils" / "_resources" / "variables.yaml")
-    print(f"  {'':<19}(Full list in {var_path})")
 
-    print("\n[ USAGE - FOLLOW THESE STEPS ]")
-    print("  0. Download Templates    : oscar.download(mode='customized')")
-    print("  1. Create Project Folder : oscar.create_project('my-project')")
-    print("  2. Edit setting file in the created folder (e.g., settings_my-experiment.yaml)")
-    print("  3. Run Simulation        : oscar.run(mode='customized', project='my-project', experiment='my-experiment')")
-    print("="*width + "\n")
+def _variables():
+    registry = load_var_registry()
+    _heading('OSCAR — OUTPUT VARIABLES')
+    for name, metadata in registry.items():
+        _field(name, f"{metadata.get('long_name', '')} [{metadata.get('unit', '')}]")
+    _end()
+    return registry
 
-def _print_advanced():
-    """Information for Advanced development mode."""
-    width = 90
-    print("\n" + "="*width)
-    print(f"{'MODE: ADVANCED (Model Development)':^90}")
-    print("="*width)
-    print("Direct control over model sub-modules and calibration internals.")
-    print("\n( ! ) STATUS: Internal development only.")
-    print("\nFuture Capabilities:")
-    print("  - Selective Execution (Land only, Climate only)")
-    print("  - Custom Calibration & Numerical Tuning")
-    print("="*width + "\n")
+
+def _general():
+    _heading('OSCAR — EARTH SYSTEM MODEL')
+    _text('Choose a mode based on what you want to do.')
+    _table([
+        ('Standard', 'Run a demonstration.', 'oscar info standard'),
+        ('Configured', 'Select available scenarios and settings.', 'oscar info configured'),
+        ('Customized', 'Run with your own prepared forcing.', 'oscar info customized'),
+    ], headers=('Mode', 'Purpose', 'More information'))
+    _end('Get started: oscar run. For command options: oscar --help.')
+    return {'modes': ['standard', 'configured', 'customized']}
+
+
+def _standard(cfg):
+    from oscar._io._download import Library, BOOTSTRAP_FILES
+    std = cfg['standard_mode']
+    lib = Library(INTERNAL_BOOTSTRAP_DIR, std['hist_type'], std['region'], files=BOOTSTRAP_FILES)
+    with xr.open_dataset(lib.files['params']) as ds:
+        members = ds.sizes['config']
+    result = {'mode': 'standard', 'hist_type': lib.hist_type, 'region': lib.region,
+              'members': members, 'hist_start': lib.hist_start, 'hist_end': lib.hist_end,
+              'projection_end': lib.end_year, 'scenarios': lib.scenarios}
+    _heading('OSCAR — STANDARD MODE')
+    _text('Run the bundled demonstration. No download or initialization required.')
+    print()
+    _pair(('History', lib.hist_type), ('Historical', f"{lib.hist_start}–{lib.hist_end}"))
+    _pair(('Region', lib.region), ('Projections', f"{lib.hist_end + 1}–{lib.end_year}"))
+    _field('Scenarios', ', '.join(lib.scenarios))
+    _output_names(std['var_select'])
+    _table([
+        ('Run demonstration', 'oscar run', 'out = oscar.run()'),
+        ('Save elsewhere', 'Add --output-dir DIR', 'Add output_dir="DIR"'),
+        ('Run again', 'Add --overwrite', 'Add overwrite=True'),
+        ('Skip plot / saving', 'Add --no-plot / --no-save', 'Add plot=False / save=False'),
+    ])
+    _end(f"Results and a temperature plot are saved in {get_paths()['results'] / 'standard'}/.")
+    return result
+
+
+def _output_names(variables, label='Outputs'):
+    registry = load_var_registry()
+    for i, var in enumerate(variables):
+        meta = registry.get(var, {})
+        _field(label if i == 0 else '', f"{meta.get('long_name', var)} ({var}, {meta.get('unit', 'n/a')})")
+
+
+def _configured(cfg, hist_type, region, library_dir):
+    from oscar._io._download import library_location, open_library
+    from oscar._workflows.configured_runs import resolve_selection
+    opt = cfg['configured_mode']
+    defaults = opt['defaults']
+    sel = resolve_selection(region=region, hist_type=hist_type)
+    hist_type, region = sel.hist_type, sel.region
+    location = Path(library_dir).expanduser().resolve() if library_dir else library_location(hist_type, region)
+    lib = open_library(hist_type, region, location) if location.exists() else None
+    result = {'mode': 'configured', 'hist_type': hist_type, 'region': region,
+              'histories': opt['allowed_hist'], 'regions': opt['allowed_regions'], 'scenarios': opt['scenarios'],
+              'library': str(location), 'library_found': lib is not None,
+              'results': str(get_paths()['results'] / 'configured')}
+    if lib:
+        result.update(hist_end=lib.hist_end, projection_end=lib.end_year)
+    _heading('OSCAR — CONFIGURED MODE')
+    _text('Run available CMIP scenarios with your choice of history, region and outputs.')
+    print()
+    mark = lambda name, default: f'{name} [default]' if name == default else name
+    _field('History', ', '.join(mark(h, defaults['hist_type']) for h in sorted(opt['allowed_hist'], reverse=True)))
+    _field('Region', ', '.join(mark(r, defaults['region']) for r in opt['allowed_regions']))
+    _field('Scenario', f"{defaults['scenario'][hist_type]} [default]")
+    _output_names(defaults['var_select'], 'Outputs')
+    _section('Available scenarios')
+    for name in sorted(opt['scenarios'], reverse=True):
+        _field(name, ', '.join(opt['scenarios'][name]))
+    _section('Examples (terminal)')
+    for task, command in (
+            ('Run with all defaults', ''),
+            ('Use CMIP6 history', ' --history CMIP6 -s SSP2-4.5'),
+            ('Use the 10-region set', ' -r IAMC_R10'),
+            ('Run two scenarios', ' -s scen7-H -s scen7-L'),
+            ('Save other outputs', ' -v D_Tg -v D_CO2'),
+            ('Save every output', ' -v all')):
+        print(f'  {task:<24}oscar run -m configured{command}')
+    print(f"  {'List output names':<24}oscar info --variables")
+    _section('Same in Python')
+    print('  import oscar')
+    print('  out = oscar.run(mode="configured")')
+    print('  out = oscar.run(mode="configured", hist_type="CMIP6", region="IAMC_R10",')
+    print('                  scenario=["SSP2-4.5"], variables=["D_Tg", "D_CO2"])')
+    _section('Where files go')
+    data = get_paths()['data_root']
+    inside = lambda path: (str(Path(path).relative_to(data)) if Path(path).is_relative_to(data) else str(path)) + '/'
+    _field('Data', str(data))
+    _field('', 'To use another folder: oscar init --data-dir PATH')
+    _field('Library', inside(location) + ('' if lib else '  (not downloaded yet)'))
+    if lib:
+        _field('Years', f'history {lib.hist_start}–{lib.hist_end}, projections {lib.hist_end + 1}–{lib.end_year}')
+    _field('Results', inside(result['results']) + f'configured_{hist_type}_{region}_results.nc')
+    _field('Plots', 'Same folder, one image per output.')
+    _end('Library and Results are inside the data folder.')
+    return result
+
+
+def _projection_years(hist_type, region, library_dir=None):
+    """'2023–2099' from a downloaded library, or None."""
+    from oscar._io._download import library_location, open_library
+    location = Path(library_dir).expanduser() if library_dir else library_location(hist_type, region)
+    if not location.exists():
+        return None
+    lib = open_library(hist_type, region, location)
+    return f'{lib.hist_end + 1}–{lib.end_year}'
+
+
+def _customized(cfg, hist_type, region, library_dir):
+    from oscar._workflows.configured_runs import resolve_selection
+    opt = cfg['configured_mode']
+    defaults = opt['defaults']
+    sel = resolve_selection(region=region, hist_type=hist_type)
+    themes = cfg['customized_mode']['output_themes']
+    years = {h: _projection_years(h, sel.region, library_dir if h == sel.hist_type else None)
+             for h in sorted(opt['allowed_hist'], reverse=True)}
+    projects = get_paths()['projects']
+    result = {'mode': 'customized', 'histories': opt['allowed_hist'], 'regions': opt['allowed_regions'],
+              'projection_years': years, 'output_themes': list(themes), 'projects': str(projects)}
+    _heading('OSCAR — CUSTOMIZED MODE')
+    _text('Run your own research experiment: your emissions, radiative forcing or land use '
+          'applied to a CMIP baseline scenario.')
+    print()
+    mark = lambda name, default: f'{name} [default]' if name == default else name
+    _field('History', ', '.join(mark(h, defaults['hist_type']) for h in years))
+    _field('Region', ', '.join(mark(r, defaults['region']) for r in opt['allowed_regions']))
+    _field('Baseline', f"{defaults['scenario'][sel.hist_type]} [default], or any scenario of configured mode")
+    _field('Inputs', 'Emissions, radiative forcing and land use: continuous annual time series '
+                     'covering every projection year')
+    _output_names(themes['climate'], 'Outputs')
+    _field('', f"Other output themes: {', '.join(t for t in themes if t != 'climate')}")
+    _section('Steps (terminal)')
+    for step, command in (('1. Create a project', 'oscar project <project-id> --experiment <experiment-id>'),
+                          ('2. Add input files', '<project-id>/inputs/'),
+                          ('3. Edit the settings', '<project-id>/settings_<experiment-id>.yaml'),
+                          ('4. Check them', 'oscar validate <project-id> --experiment <experiment-id>'),
+                          ('5. Run', 'oscar run -m customized --project <project-id> \\\n'
+                                     '  --experiment <experiment-id>')):
+        first, *rest = command.split('\n')
+        print(f'  {step:<24}{first}')
+        for line in rest:
+            print(f"  {'':<24}{line}")
+    _section('Same in Python')
+    print('  import oscar')
+    print('  oscar.create_project("<project-id>", experiment="<experiment-id>")')
+    print('  oscar.validate_project("<project-id>", experiment="<experiment-id>")')
+    print('  out = oscar.run(mode="customized", project="<project-id>",')
+    print('                  experiment="<experiment-id>")')
+    _section('Where files go')
+    data = get_paths()['data_root']
+    inside = lambda path: (str(Path(path).relative_to(data)) if Path(path).is_relative_to(data) else str(path)) + '/'
+    _field('Data', str(data))
+    _field('Templates', inside(get_paths()['customized_library']) + '  (downloaded with your first project)')
+    _field('Projects', inside(projects))
+    _field('', 'Each project holds inputs/, settings_<experiment-id>.yaml, forcing/ (compiled '
+               'forcing) and results/ (results and plots).')
+    _end('All settings, input formats and rules: INFO.md in each project folder.')
+    return result
+
+
+def show_info(mode=None, hist_type=None, region=None, library_dir=None, variables=False):
+    """Print a readable page and return structured information for Python callers."""
+    cfg = load_config()
+    if mode not in (None, 'standard', 'configured', 'customized', 'advanced'):
+        raise ValueError('Choose standard, configured or customized.')
+    if variables:
+        return _variables()
+    if mode is None:
+        return _general()
+    if mode == 'advanced':
+        from oscar._workflows.advanced_runs import OPTIONS
+        _heading('OSCAR — ADVANCED MODE')
+        _field('Purpose', 'Research workflows for collaborators')
+        _field('Options', ', '.join(OPTIONS))
+        _pair(('History', 'CMIP7'), ('Projections', '2024–2100'))
+        _field('Ensemble', f"{cfg['configured_mode']['official_nMC']} members")
+        _table([(name, ', '.join(spec['regions']), None) for name, spec in OPTIONS.items()],
+               headers=('Option', 'Model regions'), widths=(12, 68))
+        _section('Download a run option')
+        _field('SCI-lite', 'oscar download -m advanced --option SCI-lite')
+        _field('SCI-luc', 'oscar download -m advanced --option SCI-luc --region IAMC_R5')
+        _end('After downloading, follow INFO_SCI-lite.md or INFO_SCI-luc.md in the '
+             'advanced library folder for input requirements and Python examples.')
+        return {'mode': 'advanced', 'options': {name: list(spec['regions']) for name, spec in OPTIONS.items()}}
+    if mode == 'standard':
+        return _standard(cfg)
+    if mode == 'configured':
+        return _configured(cfg, hist_type, region, library_dir)
+    return _customized(cfg, hist_type, region, library_dir)

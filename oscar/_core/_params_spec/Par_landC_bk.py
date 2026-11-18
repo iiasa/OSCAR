@@ -22,7 +22,7 @@ def get_params(mod_region, **useless):
    
     ## harvested wood products
     ## load precalibrated parameters
-    ## (Earles et al., 2022; https://doi.org/10.1038/nclimate1535)
+    ## (Earles et al., 2012; https://doi.org/10.1038/nclimate1535)
     Par_tmp = load_precalib_params('wood-use_Earles-2012', mod_region, xxx_global=True)
     Par = xr.merge([Par, Par_tmp], join='outer', compat='no_conflicts')
 

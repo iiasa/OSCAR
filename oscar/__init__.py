@@ -1,17 +1,9 @@
 # oscar/__init__.py
-from importlib.metadata import version, PackageNotFoundError
+from oscar._version import get_version
+
+__version__ = get_version()
+__display_version__ = f"OSCAR_{__version__}"
 
 # 1. Core Functions
-from oscar.run import run, info, download
+from oscar.run import run, info, download, validate_project
 from oscar._io.paths import set_data_dir, get_user_data_dir, create_project
-
-# 2. Version Management
-try:
-    # This pulls the version from pyproject.toml after 'pip install -e .'
-    __version__ = version("oscar")
-except PackageNotFoundError:
-    # Fallback if the package is not installed in the environment
-    __version__ = "unknown"
-
-# Display version with a 'OSCAR_v' prefix
-__display_version__ = f"OSCAR_{__version__}"

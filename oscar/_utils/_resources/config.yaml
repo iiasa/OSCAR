@@ -3,8 +3,8 @@
 # ==========================================================
 metadata:
   zenodo_base_url: "https://zenodo.org/api/records/"
-  core_data:  { version: "v4-beta2", zenodo_id: "" }
-  run_mode: { version: "v4-beta2", zenodo_id: "22709506" }
+  core_data:  { version: "", zenodo_id: "" } # not available yet
+  run_mode: { version: "v4-beta3", zenodo_id: "24334596" }
   
   # Library Horizons
   build_end: &default_end 2100  # Official library ceiling
@@ -33,7 +33,7 @@ registry:
   all_regions: &reg_all ['IAMC_R5','IAMC_R10']
   all_scens:
     scen6: &scen6 ['SSP1-1.9', 'SSP1-2.6', 'SSP2-4.5', 'SSP3-7.0', 'SSP3-7.0-LowNTCF', 'SSP4-3.4', 'SSP4-6.0', 'SSP5-3.4-OS', 'SSP5-8.5']
-    scen7: &scen7 ['scen7-H', 'scen7-M','scen7-VL']
+    scen7: &scen7 ['scen7-H', 'scen7-HL', 'scen7-L', 'scen7-LN', 'scen7-M', 'scen7-ML', 'scen7-VL']
 
 
 # ==========================================================
@@ -48,8 +48,9 @@ standard_mode:
   # Run covers the full library range
   run_range: [1750, *default_end]
   region: "IAMC_R5"
-  scenarios: *scen7
+  scenarios: ['scen7-H', 'scen7-M', 'scen7-VL']
   var_select: *v_core
+  plot_vars: ['D_Tg']  # Plotted by default after a demonstration run.
 
 # TIER 1: CONFIGURED (Library Builder)
 configured_mode:
@@ -57,10 +58,14 @@ configured_mode:
   run_end: *default_end
   allowed_hist: ["CMIP6", "CMIP7"] #NOTE: Add CMIP7 when available
   allowed_regions: *reg_all
+  # Choices offered to users (oscar info configured).
+  scenarios:
+    CMIP7: *scen7
+    CMIP6: *scen6
   defaults:
     hist_type: "CMIP7"
     region: "IAMC_R5"
-    scenario: ["scen7-VL"]
+    scenario: { CMIP7: "scen7-VL", CMIP6: "SSP2-4.5" }
     var_select: ["D_Tg", "D_CO2"]
 
 # TIER 2: CUSTOMIZED (User Research)
@@ -68,7 +73,8 @@ customized_mode:
   allowed_hist: ["CMIP6", "CMIP7"] # NOTE: Add CMIP7 when available
   allowed_years: { min: 1750, max: *max_end }
   allowed_regions: *reg_all
-  marker_scenarios: ['scen7-H', 'scen7-VL']
+  # High and low reference scenarios run next to the user's scenarios (named <scenario>-ref).
+  marker_scenarios: { CMIP7: ['scen7-H', 'scen7-VL'], CMIP6: ['SSP1-2.6', 'SSP5-8.5'] }
 
   output_themes:
     climate: *v_core

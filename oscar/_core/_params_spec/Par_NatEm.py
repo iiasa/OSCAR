@@ -52,35 +52,6 @@ def get_params(nice_rounding=True, **useless):
     ## emissions (relative) sensitivities to climate change
     ## (Thornhill et al., 2021; https://doi.org/10.5194/acp-21-1105-2021) (Tables 6, 7, 8, 9 & 11)
     ## note: preindustrial emissions obtained through pers. comm. from Bill Collins
-    Par.coords['mod_g_dust'] = ['CNRM-ESM2-1', 'UKESM1', 'MIROC6', 'NorESM2', 'GFDL-ESM4', 'GISS-E2-1']
-    Par.coords['mod_g_salt'] = ['CNRM-ESM2-1', 'UKESM1', 'MIROC6', 'NorESM2', 'GFDL-ESM4', 'GISS-E2-1']
-    Par.coords['mod_g_DMS'] = ['UKESM1', 'NorESM2', 'GISS-E2-1']
-    Par.coords['mod_g_BVOC'] = ['UKESM1', 'NorESM2', 'GFDL-ESM4', 'CESM2-WACCM', 'GISS-E2-1']
-    Par.coords['mod_g_LNOx'] = ['UKESM1', 'GFDL-ESM4', 'CESM2-WACCM', 'GISS-E2-1']
-    Par['g_dust'] = xr.DataArray(np.array([65, -109, 70, -6., 181, 64]) / np.array([2749.3, 7875.92, 1104.82, 1646.589, 1975.828, 1765.5]), 
-        dims='mod_g_dust', attrs={'units': 'K-1'})
-    Par['g_salt'] = xr.DataArray(np.array([2570, 6.0, -3.93, 72, 258, -8.5]) / np.array([64756.92, 5504.602, 3586.251, 3711.25, 5654.69, 2606.]), 
-        dims='mod_g_salt', attrs={'units': 'K-1'})
-    Par['g_DMS'] = xr.DataArray(np.array([-0.04, -0.186, 0.02]) / np.array([32.443, 36.415, 54.109]) * (Cst.m_DMS/Cst.m_S).values, 
-        dims='mod_g_DMS', attrs={'units': 'K-1'})
-    Par['g_BVOC'] = xr.DataArray(np.array([32., 234, 81., 156, 113]) / np.array([757.353, 612.667, 483.505, 679.01, 1193.06]), 
-        dims='mod_g_BVOC', attrs={'units': 'K-1'})
-    Par['g_LNOx'] = xr.DataArray(np.array([0.27, -0.029, 0.336, 0.614]) / np.array([6.44, 3.44, 2.91, 7.20]), 
-        dims='mod_g_LNOx', attrs={'units': 'K-1'})
-    ## turn into distribution (manually for nice rounding)
-    ## note: using HalfNorm distrib for LNOx, to cover the negative range that models don't
-    if nice_rounding:
-        Par['g_dust'] = xr.DataArray([0.033, 0.036], dims='unc_Norm', attrs={'units': 'K-1'})
-        Par['g_salt'] = xr.DataArray([0.017, 0.020], dims='unc_Norm', attrs={'units': 'K-1'})
-        Par['g_DMS'] = xr.DataArray([-0.0039, 0.0045], dims='unc_Norm', attrs={'units': 'K-1'})
-        Par['g_BVOC'] = xr.DataArray([0.18, 0.12], dims='unc_LogNorm', attrs={'units': 'K-1'})
-        Par['g_LNOx'] = xr.DataArray([0.059, 2*0.047, 0.047], dims='unc_2HalfNorm', attrs={'units': 'K-1'})
-        Par = Par.drop_dims(['mod_g_dust', 'mod_g_salt', 'mod_g_DMS', 'mod_g_BVOC', 'mod_g_LNOx'])
-
-
-    ## emissions (relative) sensitivities to climate change
-    ## (Thornhill et al., 2021; https://doi.org/10.5194/acp-21-1105-2021) (Tables 6, 7, 8, 9 & 11)
-    ## note: preindustrial emissions obtained through pers. comm. from Bill Collins
     ## note: must convert the paper's parameters from finite difference to the exponential formula
     Par.coords['mod_g_dust'] = ['CNRM-ESM2-1', 'UKESM1', 'MIROC6', 'NorESM2', 'GFDL-ESM4', 'GISS-E2-1']
     Par.coords['mod_g_salt'] = ['CNRM-ESM2-1', 'UKESM1', 'MIROC6', 'NorESM2', 'GFDL-ESM4', 'GISS-E2-1']

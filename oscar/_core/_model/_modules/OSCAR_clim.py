@@ -17,7 +17,7 @@ OSCAR_clim = Model('OSCAR_clim')
 ## (Geoffroy et al., 2013; https://doi.org/10.1175/JCLI-D-12-00196.1)
 
 ## global precipitation: 
-## (Allan et al., 2013; https://doi.org/10.1007/s10712-012-9213-z)
+## (Allan et al., 2014; https://doi.org/10.1007/s10712-012-9213-z)
 
 
 ##=====================
@@ -83,14 +83,25 @@ def Eq__D_OHC(Var, Par):
     return Par.p_ohc * (Par.Th_g * Var.D_Tg + Par.Th_d * Var.D_Td)
 
 
-## Earth energy imbalance
+## Earth energy imbalance (= net radiative flux at TOA)
 OSCAR_clim.process(
     Out = 'EEI', 
-    In = ('D_Tg', 'D_Td'), 
+    In = ('d_Tg', 'd_Td'), 
     Eq = lambda Var, Par: Eq__EEI(Var, Par), 
-    units = 'W yr m-2')
+    units = 'W m-2')
 
 def Eq__EEI(Var, Par):
+    return Par.Th_g * Var.d_Tg + Par.Th_d * Var.d_Td
+
+
+## Earth heat inventory
+OSCAR_clim.process(
+    Out = 'D_EHI', 
+    In = ('D_Tg', 'D_Td'), 
+    Eq = lambda Var, Par: Eq__D_EHI(Var, Par), 
+    units = 'W yr m-2')
+
+def Eq__D_EHI(Var, Par):
     return Par.Th_g * Var.D_Tg + Par.Th_d * Var.D_Td
 
 

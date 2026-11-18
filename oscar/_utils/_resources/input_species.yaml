@@ -1,69 +1,73 @@
 # ==============================================================================
 # OSCAR INPUT SPECIES REGISTRY
 # ==============================================================================
-# This file defines all valid input variables for the 'Customized' mode.
-# Units are synchronized with the core physics engine (oscar/_core/_model/).
+# Input variables of the 'Customized' mode, with the units and dimensions OSCAR
+# expects (those of the CMIP library forcing).
+#   - Sections 1-3 are accepted as customized inputs.
+#   - Sections 4-5 are reference only: not accepted as customized inputs yet.
+# Dimensions: scen = your scenario name; year = every projection year.
+# Emissions and radiative forcing may also carry reg_land (regions are added up).
+# Labels of reg_land: IAMC_R5 or IAMC_R10 region names, or World (not for land use).
 # ==============================================================================
 
-# 1. ANTHROPOGENIC EMISSIONS
-# Expected Format: [scenario, year, region, species, value]
+# 1. ANTHROPOGENIC EMISSIONS (atmospheric CSV or NetCDF)
 anthropogenic_emissions:
-  D_Eff:        {description: "Fossil CO2 emissions", unit: "PgC yr-1"}
-  D_Eluc:       {description: "Land use change CO2 emissions", unit: "PgC yr-1"} # will overwrite LULUCC CO2 emissions in the core model
-  D_Eant_CH4:   {description: "Anthropogenic Methane (CH4) emissions", unit: "TgC yr-1"}
-  D_Eant_N2O:   {description: "Anthropogenic Nitrous Oxide (N2O) emissions", unit: "TgN yr-1"}
-  D_Eant_NOx:   {description: "Nitrogen Oxides (NOx) emissions", unit: "TgN yr-1"}
-  D_Eant_SO2:   {description: "Sulfur Dioxide (SO2) emissions", unit: "TgS yr-1"}
-  D_Eant_VOC:   {description: "Volatile Organic Compounds (VOC) emissions", unit: "Tg yr-1"}
-  D_Eant_BC:    {description: "Black Carbon (BC) emissions", unit: "Tg yr-1"}
-  D_Eant_OC:    {description: "Organic Carbon (OC) emissions", unit: "Tg yr-1"}
-  D_Eant_NH3:   {description: "Ammonia (NH3) emissions", unit: "TgN yr-1"}
-  D_Eant_CO:    {description: "Carbon Monoxide (CO) emissions", unit: "Tg yr-1"}
-  D_Eant_Xhalo: {description: "Halogenated species emissions", unit: "Gg yr-1"}
-  
-# 2. BIOMASS BURNING EMISSIONS
-# Expected Format: [scenario, year, region, species, value]
-biomass_burning_emissions:
-    D_Ebb_CH4:  {description: "Change in biomass burning CH4 emissions", unit: "TgC yr-1"}
-    D_Ebb_N2O:  {description: "Change in biomass burning N2O emissions",  unit: "TgN yr-1"}
-    D_Ebb_H2:   {description: "Change in biomass burning H2 emissions",   unit: "TgH2 yr-1"}
-    D_Ebb_BC:   {description: "Change in biomass burning BC emissions",   unit: "TgC yr-1"}
-    D_Ebb_OC:   {description: "Change in biomass burning OC emissions",   unit: "TgC yr-1"}
-    D_Ebb_SO2:  {description: "Change in biomass burning SO2 emissions",  unit: "TgS yr-1"}
-    D_Ebb_NH3:  {description: "Change in biomass burning NH3 emissions",  unit: "TgN yr-1"}
-    D_Ebb_NOx:  {description: "Change in biomass burning NOx emissions",  unit: "TgN yr-1"}
-    D_Ebb_CO:   {description: "Change in biomass burning CO emissions",   unit: "TgC yr-1"}
-    D_Ebb_VOC:  {description: "Change in biomass burning VOC emissions",  unit: "Tg yr-1"}
+  D_Eff:        {description: "Fossil CO2 emissions", unit: "PgC yr-1", dims: [scen, year]}
+  D_Eluc:       {description: "Land-use change CO2 emissions; overrides those computed from land use", unit: "PgC yr-1", dims: [scen, year]}
+  D_Eant_CH4:   {description: "Methane (CH4) emissions", unit: "TgC yr-1", dims: [scen, year]}
+  D_Eant_N2O:   {description: "Nitrous oxide (N2O) emissions", unit: "TgN yr-1", dims: [scen, year]}
+  D_Eant_NOx:   {description: "Nitrogen oxides (NOx) emissions", unit: "TgN yr-1", dims: [scen, year]}
+  D_Eant_CO:    {description: "Carbon monoxide (CO) emissions", unit: "TgC yr-1", dims: [scen, year]}
+  D_Eant_VOC:   {description: "Volatile organic compounds (VOC) emissions", unit: "Tg yr-1", dims: [scen, year]}
+  D_Eant_SO2:   {description: "Sulfur dioxide (SO2) emissions", unit: "TgS yr-1", dims: [scen, year]}
+  D_Eant_NH3:   {description: "Ammonia (NH3) emissions", unit: "TgN yr-1", dims: [scen, year]}
+  D_Eant_BC:    {description: "Black carbon (BC) emissions", unit: "TgC yr-1", dims: [scen, year]}
+  D_Eant_OC:    {description: "Organic carbon (OC) emissions", unit: "TgC yr-1", dims: [scen, year]}
+  D_Eant_H2:    {description: "Hydrogen (H2) emissions", unit: "TgH2 yr-1", dims: [scen, year]}
+  D_Eant_Xhalo: {description: "Halogenated species emissions (species: see halogens)", unit: "Gg yr-1", dims: [scen, year, spc_halo]}
 
-# 3. LAND-USE AND LAND-COVER CHANGE (LULCC)
-# Expected Format: [scenario, year, region, bio_from, bio_to, value]
-lulcc:
-  D_dA_lcc1:   {description: "Land cover area change (primary land)", unit: "Mha yr-1"}
-  D_dA_lcc2:   {description: "Land cover area change (secondary land)", unit: "Mha yr-1"}
-  D_dA_Ashift: {description: "Shifting cultivation area change", unit: "Mha yr-1"}
-  D_dA_wharv1: {description: "Harvested area (primary land)", unit: "Mha yr-1"}
-  D_dA_wharv2: {description: "Harvested area (secondary land)", unit: "Mha yr-1"}
-
-# 4. RADIATIVE FORCING ANOMALIES (Global)
-# Expected Format: [scenario, year, variable, value]
+# 2. RADIATIVE FORCING (atmospheric CSV or NetCDF)
 rf:
-  ERF_aic:   {description: "Aviation-induced cloudiness effective radiative forcing", unit: "W m-2"}
-  ERF_irrig: {description: "Irrigation effective radiative forcing", unit: "W m-2"}
-  ERF_solar: {description: "Solar effective radiative forcing", unit: "W m-2"}
-  RF_volc:   {description: "Volcanic effective radiative forcing", unit: "W m-2"}
+  ERF_solar: {description: "Solar effective radiative forcing", unit: "W m-2", dims: [scen, year]}
+  ERF_volc:  {description: "Volcanic effective radiative forcing", unit: "W m-2", dims: [scen, year]}
+  ERF_aic:   {description: "Aviation-induced cloudiness effective radiative forcing", unit: "W m-2", dims: [scen, year]}
+  ERF_irrig: {description: "Irrigation effective radiative forcing", unit: "W m-2", dims: [scen, year]}
 
-# 5. ATMOSPHERIC CONCENTRATIONS CHANGE
-# Expected Format: [scenario, year, species, value]
+# 3. LAND-USE AND LAND-COVER CHANGE (lulcc CSV or NetCDF; per region, biomes: see biomes)
+lulcc:
+  D_dA_lcc1:   {description: "Land-cover change (primary land)", unit: "Mha yr-1", dims: [scen, year, reg_land, bio_from, bio_to]}
+  D_dA_lcc2:   {description: "Land-cover change (secondary land)", unit: "Mha yr-1", dims: [scen, year, reg_land, bio_from, bio_to]}
+  D_dA_shift:  {description: "Shifting cultivation", unit: "Mha yr-1", dims: [scen, year, reg_land, bio_from, bio_to]}
+  D_dA_wharv1: {description: "Harvested area (primary land)", unit: "Mha yr-1", dims: [scen, year, reg_land, bio_land]}
+  D_dA_wharv2: {description: "Harvested area (secondary land)", unit: "Mha yr-1", dims: [scen, year, reg_land, bio_land]}
+
+# 4. BIOMASS BURNING EMISSIONS (reference only)
+biomass_burning_emissions:
+  D_Ebb_CH4:  {description: "Change in biomass burning CH4 emissions", unit: "TgC yr-1"}
+  D_Ebb_N2O:  {description: "Change in biomass burning N2O emissions", unit: "TgN yr-1"}
+  D_Ebb_H2:   {description: "Change in biomass burning H2 emissions", unit: "TgH2 yr-1"}
+  D_Ebb_BC:   {description: "Change in biomass burning BC emissions", unit: "TgC yr-1"}
+  D_Ebb_OC:   {description: "Change in biomass burning OC emissions", unit: "TgC yr-1"}
+  D_Ebb_SO2:  {description: "Change in biomass burning SO2 emissions", unit: "TgS yr-1"}
+  D_Ebb_NH3:  {description: "Change in biomass burning NH3 emissions", unit: "TgN yr-1"}
+  D_Ebb_NOx:  {description: "Change in biomass burning NOx emissions", unit: "TgN yr-1"}
+  D_Ebb_CO:   {description: "Change in biomass burning CO emissions", unit: "TgC yr-1"}
+  D_Ebb_VOC:  {description: "Change in biomass burning VOC emissions", unit: "Tg yr-1"}
+
+# 5. ATMOSPHERIC CONCENTRATIONS CHANGE (reference only)
 conc:
-  D_CO2: {description: "Atmospheric CO2 concentration", unit: "ppm"}
-  D_CH4: {description: "Atmospheric CH4 concentration", unit: "ppb"}
-  D_N2O: {description: "Atmospheric N2O concentration", unit: "ppb"}
+  D_CO2:   {description: "Atmospheric CO2 concentration", unit: "ppm"}
+  D_CH4:   {description: "Atmospheric CH4 concentration", unit: "ppb"}
+  D_N2O:   {description: "Atmospheric N2O concentration", unit: "ppb"}
   D_Xhalo: {description: "Halogenated species concentration", unit: "ppt"}
 
-# 6. REGISTERED HALOGENATED SPECIES (spc_halo) EMISSIONS AND CONCENTRATIONS
-# Supported halogenated species for E_Xhalo and D_Xhalo
+# LABELS
+# Biomes (bio_land, bio_from, bio_to)
+biomes: ['Forest', 'Non-Forest', 'Cropland', 'Pasture', 'Urban']
+
+# Halogenated species (spc_halo) of D_Eant_Xhalo and D_Xhalo
 halogens: [
-  'NF3', 'SF6', 'SO2F2', 
+  'NF3', 'SF6', 'SO2F2',
   'CF4', 'C2F6', 'C3F8', 'c-C4F8', 'C4F10', 'n-C5F12', 'n-C6F14', 'C7F16', 'C8F18', # PFCs
   'HFC-23', 'HFC-32', 'HFC-125', 'HFC-134a', 'HFC-143a', 'HFC-152a', 'HFC-227ea', 'HFC-236fa', 'HFC-245fa', 'HFC-365mfc', 'HFC-43-10mee', # HFCs
   'CFC-11', 'CFC-12', 'CFC-113', 'CFC-114', 'CFC-115', # CFCs
@@ -71,4 +75,3 @@ halogens: [
   'CH3Cl', 'CH2Cl2', 'CHCl3', 'CCl4', 'CH3CCl3', # HCCs
   'CH3Br', 'Halon-1211', 'Halon-1301', 'Halon-2402' # Halons
 ]
-

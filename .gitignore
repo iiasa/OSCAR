@@ -3,9 +3,9 @@
 # ==================================================
 
 # ------------------
-# Local user settings
-.oscar_settings.json
+# Local user settings (legacy location; settings now live in the user config folder)
 # ------------------
+.oscar_settings.json
 
 # ------------------
 # Data & Inputs
@@ -17,92 +17,46 @@ oscar_data/**
 !oscar_data/library/core_data/params_precalib/
 !oscar_data/library/core_data/params_precalib/**
 
-
-# ==================================================
-
 # ------------------
 # Python cache / bytecode
 # ------------------
 __pycache__/
 *.py[cod]
-*$py.class
-*.pyc
-*.so
 
 # ------------------
-# Development & Environment
+# Environments
 # ------------------
 .venv/
 venv/
-env/
-ENV/
 .uv/
 .env
 .env.*
-.oscar_settings.json
 .python-version
-pip-log.txt
-pip-delete-this-directory.txt
 
 # ------------------
-# IDE / Editor / OS Files
+# IDE / Editor / OS files
 # ------------------
 .vscode/
 .idea/
-.spyderproject
-.ropeproject
 .DS_Store
 Thumbs.db
 .ipynb_checkpoints/
 
 # ------------------
-# Build / Packaging Artifacts
+# Build / packaging artifacts
 # ------------------
 build/
 dist/
-.eggs/
 *.egg-info/
-.installed.cfg
-*.egg
-*.manifest
-*.spec
-sdist/
-var/
-target/
-.Python
-develop-eggs/
-downloads/
-lib/
-lib64/
-parts/
 
 # ------------------
-# Test / Coverage / Docs
+# Tests / coverage (the pytest cache lives in oscar_data/, see pyproject.toml)
 # ------------------
-htmlcov/
-.tox/
 .coverage
 .coverage.*
-.cache/
-coverage.xml
-nosetests.xml
-*,cover
-.hypothesis/
-docs/_build/
+htmlcov/
 
 # ------------------
-# Logs & Scripts
+# Logs
 # ------------------
 *.log
-
-# ------------------
-# Other / Frameworks
-# ------------------
-local_settings.py
-instance/
-.webassets-cache
-.scrapy
-celerybeat-schedule
-*.mo
-*.pot
-

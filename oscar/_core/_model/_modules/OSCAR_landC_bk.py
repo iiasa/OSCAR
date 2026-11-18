@@ -402,7 +402,7 @@ OSCAR_landC_bk.process(
     units = 'PgC yr-1')
 
 def Eq__D_Efire_bk(Var, Par):
-    return Par.v_fire * Var.r_vfire * Var.D_Cveg_bk
+    return Par.v_fire * ((Par.Cveg_bk_pi + Var.D_Cveg_bk) * Var.r_vfire - Par.Cveg_bk_pi)
 
 
 ## total mortality flux (under bookkeeping)
@@ -414,7 +414,7 @@ OSCAR_landC_bk.process(
     units = 'PgC yr-1')
 
 def Eq__D_Fmort_bk(Var, Par):
-    return 1/Par.t2_regrow * Var.r_vmort * Var.D_Cveg_bk
+    return 1/Par.t2_regrow * ((Par.Cveg_bk_pi + Var.D_Cveg_bk) * Var.r_vmort - Par.Cveg_bk_pi)
 
 
 ## coarse woody debris production flux (under bookkeeping)
@@ -422,7 +422,7 @@ OSCAR_landC_bk.process(
     Out = 'D_Fcwd_prod_bk', 
     In = ('D_Cveg_bk',), 
     Eq = lambda Var, Par: Eq__D_Fcwd_prod_bk(Var, Par), 
-    units='PgC Mha-1 yr-1')
+    units='PgC yr-1')
 
 def Eq__D_Fcwd_prod_bk(Var, Par):
     return 1/Par.t_wood * Par.p_wood * Var.D_Cveg_bk
@@ -447,7 +447,7 @@ OSCAR_landC_bk.process(
     units = 'PgC yr-1')
 
 def Eq__D_Fcwd_loss_bk(Var, Par):
-    return Par.v_cwd * Var.r_vcwd * Var.D_Ccwd_bk
+    return Par.v_cwd * ((Par.Ccwd_bk_pi + Var.D_Ccwd_bk) * Var.r_vcwd - Par.Ccwd_bk_pi)
 
 
 ## coarse woody debris emissions (under bookkeeping)
@@ -469,7 +469,7 @@ OSCAR_landC_bk.process(
     units = 'PgC yr-1')
 
 def Eq__D_Esoil_bk(Var, Par):
-    return Par.v_resp * Var.r_vresp * Var.D_Csoil_bk
+    return Par.v_resp * ((Par.Csoil_bk_pi + Var.D_Csoil_bk) * Var.r_vresp - Par.Csoil_bk_pi)
 
 
 ## harvested wood product decay
